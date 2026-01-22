@@ -683,7 +683,7 @@ async def run_bot() -> None:
             return
         
         await callback.answer()
-        await admin_menu(callback.message, state)
+        await admin_menu(callback, state)
 
     @router.callback_query(OrderFlow.admin_edit_manager_region, F.data.in_(["yes", "no"]))
     async def admin_add_manager_confirm(callback: CallbackQuery, state: FSMContext) -> None:
@@ -699,7 +699,7 @@ async def run_bot() -> None:
             await callback.message.edit_text(f"Регион: {region}\n\nВведите имя нового менеджера:")
         else:
             await state.clear()
-            await admin_menu(callback.message, state)
+            await admin_menu(callback, state)
 
     @router.callback_query(OrderFlow.ask_designer_wallpapers, F.data.in_(["yes", "no"]))
     async def ask_designer_wallpapers(callback: CallbackQuery, state: FSMContext) -> None:
