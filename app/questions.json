@@ -1,0 +1,129 @@
+{
+  "freski": {
+    "type": "ФРЕСКИ",
+    "description": "Библиотека изображений Affresco и индивидуальные изображения",
+    "item": {
+      "article": "AF2101",
+      "size_cm": {
+        "width": 300,
+        "height": 100
+      },
+      "materials": [
+        "Велюр",
+        "Сатин",
+        "Саванна",
+        "Безе",
+        "Велатура",
+        "Саббия",
+        "Саббия Фасад",
+        "Пиетра",
+        "Кракелюр средняя степень",
+        "Кракелюр без старения",
+        "Фабриз X",
+        "Фабриз Y",
+        "Колоре",
+        "Колоре Лайт"
+      ],
+      "note":null
+    }
+  },
+
+  "designer_wallpapers": {
+    "type": "ДИЗАЙНЕРСКИЕ ОБОИ",
+    "catalogs": [
+      "Labirint",
+      "Wallpaper I",
+      "Wallpaper II",
+      "Wallpaper III",
+      "Favorite Art",
+      "Line Art",
+      "Emotion Art",
+      "Fantasy",
+      "Fluid",
+      "Rio",
+      "Atmosphere",
+      "Exclusive",
+      "Сказки Affresco",
+      "Fine Art",
+      "Trend Art",
+      "New Art",
+      "Re-Space",
+      "Art Fabric"
+    ],
+    "item": {
+      "catalog_name": null,
+      "article": null,
+      "material": "Велюр", //Просто сказать об этом
+      "panel_size_cm": [
+        "10.0 x 20.0",
+        "12.0 x 20",
+        "15.0 x 30.0"
+      ],
+      "panels_order_left_to_right": [],
+      "production_type": null,//единым полотном или порезать на панели
+      "color_sample": { //изготовление цветопробы
+        "required": false,
+        "agreed_without_sample": false
+      }
+    }
+  },
+
+  "background_wallpapers": {
+    "type": "ФОНОВЫЕ ОБОИ",
+    "catalogs": [
+      "Dream Forest",
+      "Exclusive",
+      "Affresco Colore",
+      "Botanika",
+      "Ethno"
+    ],
+    "item": {
+      "article": null,
+      "size_cm": {
+        "width": null,
+        "height": null
+      },
+      "material": {
+        "type": null, //велюр или колоре
+        "standard_heights_cm": {
+          "velour": [200, 220, 240, 260, 280, 300, 315],
+          "colore": [220, 240, 260, 280, 300]
+        }
+      },
+      "color_sample": {
+        "required": false,
+        "agreed_without_sample": false
+      }
+    }
+  },
+
+  "delivery": {
+    "ready_time": null,
+    "address": {
+      "to_transport_terminal_city": "Нижний Новгород",
+      "to_exact_address": null
+    }
+  },
+
+  "paintings": {
+    "type": "КАРТИНЫ ИЗ КАТАЛОГА ФРЕСКИ И ИНДИВИДУАЛЬНЫЕ ИЗОБРАЖЕНИЯ",
+    "material": {
+      "name": "Итальянский холст", //просто сказать
+      "max_size_cm": {
+        "width": 450, 
+        "height": 140
+      }
+    },
+    "item": {
+      "article": null,
+      "canvas_total_size_cm": {
+        "width": null,
+        "height": null
+      },
+      "visible_image_size_cm": {
+        "width": null,
+        "height": null
+      }
+    }
+  }
+}

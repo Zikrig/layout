@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  bot:
+    build: .
+    env_file:
+      - .env
+    environment:
+      BOT_TOKEN: "${BOT_TOKEN}"
+      MANAGERS_JSON: "app/managers.json"
+      ADMIN_IDS: "${ADMIN_IDS:-}"
+      FORWARD_TO_ADMINS: "${FORWARD_TO_ADMINS:-true}"
+    volumes:
+      - ./app/managers.json:/app/app/managers.json:ro
+    restart: unless-stopped
+
