@@ -7,6 +7,7 @@ from typing import List
 class BotConfig:
     token: str
     managers_json: str
+    freski_catalogs: List[str]
     designer_catalogs: List[str]
     designer_panel_sizes: List[str]
     background_catalogs: List[str]
@@ -14,6 +15,7 @@ class BotConfig:
     background_heights_velour: List[int]
     background_heights_colore: List[int]
     freski_materials: List[str]
+    delivery_carriers: List[str]
     delivery_default_city: str
     admin_ids: List[int]
     forward_to_admins: bool
@@ -25,6 +27,11 @@ def load_config() -> BotConfig:
         raise RuntimeError("BOT_TOKEN is required")
 
     managers_json = os.getenv("MANAGERS_JSON", "app/managers.json")
+
+    freski_catalogs = [
+        "Библиотека Affresco",
+        "Индивидуальные изображения",
+    ]
 
     # Данные из questions.json - designer_wallpapers
     designer_catalogs = [
@@ -49,9 +56,13 @@ def load_config() -> BotConfig:
     ]
 
     designer_panel_sizes = [
-        "10.0 x 20.0",
-        "12.0 x 20",
-        "15.0 x 30.0",
+        "67 x 200",
+        "73 x 220",
+        "80 x 240",
+        "87 x 260",
+        "93 x 280",
+        "100 x 300",
+        "105 x 315",
     ]
 
     # Данные из questions.json - background_wallpapers
@@ -78,12 +89,19 @@ def load_config() -> BotConfig:
         "Саббия",
         "Саббия Фасад",
         "Пиетра",
-        "Кракелюр средняя степень",
-        "Кракелюр без старения",
+        "Кракелюр",
         "Фабриз X",
         "Фабриз Y",
         "Колоре",
         "Колоре Лайт",
+    ]
+
+    delivery_carriers = [
+        "Деловые Линии",
+        "ПЭК",
+        "СДЭК",
+        "Самовывоз",
+        "Другое",
     ]
 
     # Данные из questions.json - delivery
@@ -114,6 +132,7 @@ def load_config() -> BotConfig:
     return BotConfig(
         token=token,
         managers_json=managers_json,
+        freski_catalogs=freski_catalogs,
         designer_catalogs=designer_catalogs,
         designer_panel_sizes=designer_panel_sizes,
         background_catalogs=background_catalogs,
@@ -121,6 +140,7 @@ def load_config() -> BotConfig:
         background_heights_velour=background_heights_velour,
         background_heights_colore=background_heights_colore,
         freski_materials=freski_materials,
+        delivery_carriers=delivery_carriers,
         delivery_default_city=delivery_default_city,
         admin_ids=admin_ids,
         forward_to_admins=forward_to_admins,

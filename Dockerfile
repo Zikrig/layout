@@ -11,3 +11,5 @@ ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "app.bot"]
 
+
+

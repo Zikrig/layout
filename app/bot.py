@@ -20,10 +20,14 @@ logging.basicConfig(level=logging.INFO)
 class OrderFlow(StatesGroup):
     # Фрески
     ask_freski = State()
+    freski_catalog = State()
     freski_article = State()
     freski_width = State()
     freski_height = State()
     freski_material = State()
+    freski_humidity = State()
+    freski_crackle_aging = State()
+    freski_color_sample = State()
     freski_note = State()
     # Дизайнерские обои
     ask_designer_wallpapers = State()
@@ -33,18 +37,15 @@ class OrderFlow(StatesGroup):
     designer_panel_order = State()
     designer_production_type = State()
     designer_color_sample = State()
-    designer_color_sample_agreed = State()
-    designer_comment = State()
+    designer_mirror = State()
     # Фоновые обои
     ask_background_wallpapers = State()
+    background_material = State()
     background_catalog = State()
     background_article = State()
-    background_material = State()
-    background_width = State()
     background_height = State()
+    background_width = State()
     background_color_sample = State()
-    background_color_sample_agreed = State()
-    background_comment = State()
     # Картины
     ask_paintings = State()
     paintings_article = State()
@@ -52,8 +53,15 @@ class OrderFlow(StatesGroup):
     paintings_canvas_height = State()
     paintings_visible_width = State()
     paintings_visible_height = State()
+    # Доставка
+    ask_delivery_needed = State()
+    delivery_type = State()
+    delivery_carrier = State()
+    delivery_crate = State()
     # Финальные данные
-    ask_name = State()
+    ask_legal_entity = State()
+    ask_city = State()
+    ask_phone = State()
     ask_email = State()
     ask_region = State()
     # Админские команды
@@ -81,8 +89,8 @@ def yes_no_kb() -> InlineKeyboardMarkup:
 
 def list_kb(items: list[str], prefix: str = "item") -> InlineKeyboardMarkup:
     buttons = []
-    for item in items:
-        buttons.append([InlineKeyboardButton(text=item, callback_data=f"{prefix}:{item}")])
+    for idx, item in enumerate(items):
+        buttons.append([InlineKeyboardButton(text=item, callback_data=f"{prefix}:{idx}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -159,12 +167,16 @@ def safe_value(value: Any) -> str:
 
 def format_user_summary(order: dict[str, Any]) -> str:
     """Форматирует заявку для пользователя - без tg id и без разделов 'Нет'"""
-    name = order["client"].get("name", "-")
+    legal_entity = order["client"].get("legal_entity", "-")
+    city = order["client"].get("city", "-")
+    phone = order["client"].get("phone", "-")
     email = order["client"].get("email", "-")
     region = order["client"].get("region", "-")
 
     lines = [
-        f"Имя: {name}",
+        f"Юрлицо: {legal_entity}",
+        f"Город: {city}",
+        f"Телефон: {phone}",
         f"Email: {email}",
         f"Регион доставки: {region}",
         "",
@@ -177,10 +189,14 @@ def format_user_summary(order: dict[str, Any]) -> str:
         lines.extend(
             [
                 "ФРЕСКИ",
+                f"Каталог: {safe_value(freski.get('catalog_name'))}",
                 f"Артикул: {safe_value(freski.get('article'))}",
                 f"Ширина, см: {safe_value(size.get('width'))}",
                 f"Высота, см: {safe_value(size.get('height'))}",
                 f"Материал: {safe_value(freski.get('material'))}",
+                f"Цветопроба: {safe_value(freski.get('color_sample'))}",
+                f"Гидроизоляция: {safe_value(freski.get('hydro_insulation'))}",
+                f"Старение: {safe_value(freski.get('crackle_aging'))}",
                 f"Примечание: {safe_value(freski.get('note'))}",
                 "",
             ]
@@ -200,8 +216,7 @@ def format_user_summary(order: dict[str, Any]) -> str:
                 f"Порядок панелей: {safe_value(designer.get('panels_order_left_to_right'))}",
                 f"Тип производства: {safe_value(designer.get('production_type'))}",
                 f"Цветопроба нужна: {safe_value(color_sample.get('required'))}",
-                f"Согласны без пробы: {safe_value(color_sample.get('agreed_without_sample'))}",
-                f"Комментарий: {safe_value(designer.get('comment'))}",
+                f"Отзеркалить: {safe_value(designer.get('mirror'))}",
                 "",
             ]
         )
@@ -220,8 +235,6 @@ def format_user_summary(order: dict[str, Any]) -> str:
                 f"Ширина, см: {safe_value(bg_size.get('width'))}",
                 f"Высота, см: {safe_value(bg_size.get('height'))}",
                 f"Цветопроба нужна: {safe_value(bg_color_sample.get('required'))}",
-                f"Согласны без пробы: {safe_value(bg_color_sample.get('agreed_without_sample'))}",
-                f"Комментарий: {safe_value(background.get('comment'))}",
                 "",
             ]
         )
@@ -247,19 +260,36 @@ def format_user_summary(order: dict[str, Any]) -> str:
             ]
         )
 
+    delivery = order.get("delivery", {})
+    if delivery.get("needed") is not None:
+        lines.extend(
+            [
+                "ДОСТАВКА",
+                f"Нужна: {safe_value(delivery.get('needed'))}",
+                f"Тип: {safe_value(delivery.get('type'))}",
+                f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
+                f"Обрешетка: {safe_value(delivery.get('crate'))}",
+                "",
+            ]
+        )
+
     return "\n".join(lines)
 
 
 def format_summary(order: dict[str, Any]) -> str:
     tg = order["client"].get("telegram", "-")
-    name = order["client"].get("name", "-")
+    legal_entity = order["client"].get("legal_entity", "-")
+    city = order["client"].get("city", "-")
+    phone = order["client"].get("phone", "-")
     email = order["client"].get("email", "-")
     region = order["client"].get("region", "-")
 
     lines = [
         "Новая заявка",
         f"Пользователь: {tg}",
-        f"Кто вы: {name}",
+        f"Юрлицо: {legal_entity}",
+        f"Город: {city}",
+        f"Телефон: {phone}",
         f"Email: {email}",
         f"Регион доставки: {region}",
         "",
@@ -272,10 +302,14 @@ def format_summary(order: dict[str, Any]) -> str:
         lines.extend(
             [
                 "ФРЕСКИ: Да",
+                f"Каталог: {safe_value(freski.get('catalog_name'))}",
                 f"Артикул: {safe_value(freski.get('article'))}",
                 f"Ширина, см: {safe_value(size.get('width'))}",
                 f"Высота, см: {safe_value(size.get('height'))}",
                 f"Материал: {safe_value(freski.get('material'))}",
+                f"Цветопроба: {safe_value(freski.get('color_sample'))}",
+                f"Гидроизоляция: {safe_value(freski.get('hydro_insulation'))}",
+                f"Старение: {safe_value(freski.get('crackle_aging'))}",
                 f"Примечание: {safe_value(freski.get('note'))}",
                 "",
             ]
@@ -297,8 +331,7 @@ def format_summary(order: dict[str, Any]) -> str:
                 f"Порядок панелей: {safe_value(designer.get('panels_order_left_to_right'))}",
                 f"Тип производства: {safe_value(designer.get('production_type'))}",
                 f"Цветопроба нужна: {safe_value(color_sample.get('required'))}",
-                f"Согласны без пробы: {safe_value(color_sample.get('agreed_without_sample'))}",
-                f"Комментарий: {safe_value(designer.get('comment'))}",
+                f"Отзеркалить: {safe_value(designer.get('mirror'))}",
                 "",
             ]
         )
@@ -319,8 +352,6 @@ def format_summary(order: dict[str, Any]) -> str:
                 f"Ширина, см: {safe_value(bg_size.get('width'))}",
                 f"Высота, см: {safe_value(bg_size.get('height'))}",
                 f"Цветопроба нужна: {safe_value(bg_color_sample.get('required'))}",
-                f"Согласны без пробы: {safe_value(bg_color_sample.get('agreed_without_sample'))}",
-                f"Комментарий: {safe_value(background.get('comment'))}",
                 "",
             ]
         )
@@ -344,6 +375,19 @@ def format_summary(order: dict[str, Any]) -> str:
                 f"Видимый размер изображения, см:",
                 f"  Ширина: {safe_value(visible_size.get('width'))}",
                 f"  Высота: {safe_value(visible_size.get('height'))}",
+                "",
+            ]
+        )
+
+    delivery = order.get("delivery", {})
+    if delivery.get("needed") is not None:
+        lines.extend(
+            [
+                "ДОСТАВКА",
+                f"Нужна: {safe_value(delivery.get('needed'))}",
+                f"Тип: {safe_value(delivery.get('type'))}",
+                f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
+                f"Обрешетка: {safe_value(delivery.get('crate'))}",
                 "",
             ]
         )
@@ -383,12 +427,23 @@ async def ensure_user_profile(
 
 def build_empty_order(telegram: str) -> dict[str, Any]:
     return {
-        "client": {"telegram": telegram},
+        "client": {
+            "telegram": telegram,
+            "legal_entity": None,
+            "city": None,
+            "phone": None,
+            "email": None,
+            "region": None,
+        },
         "freski": {
             "enabled": False,
+            "catalog_name": None,
             "article": None,
             "size_cm": {"width": None, "height": None},
             "material": None,
+            "color_sample": None,
+            "hydro_insulation": None,
+            "crackle_aging": None,
             "note": None,
         },
         "designer_wallpapers": {
@@ -399,7 +454,7 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
             "panels_order_left_to_right": None,
             "production_type": None,
             "color_sample": {"required": None, "agreed_without_sample": None},
-            "comment": None,
+            "mirror": None,
         },
         "background_wallpapers": {
             "enabled": False,
@@ -408,13 +463,18 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
             "material_type": None,
             "size_cm": {"width": None, "height": None},
             "color_sample": {"required": None, "agreed_without_sample": None},
-            "comment": None,
         },
         "paintings": {
             "enabled": False,
             "article": None,
             "canvas_total_size_cm": {"width": None, "height": None},
             "visible_image_size_cm": {"width": None, "height": None},
+        },
+        "delivery": {
+            "needed": None,
+            "type": None,
+            "carrier": None,
+            "crate": None,
         },
     }
 
@@ -720,7 +780,8 @@ async def run_bot() -> None:
     @router.callback_query(OrderFlow.designer_catalog, F.data.startswith("catalog:"))
     async def designer_catalog(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        catalog_name = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        catalog_name = config.designer_catalogs[idx]
         data = await state.get_data()
         order = data["order"]
         order["designer_wallpapers"]["catalog_name"] = catalog_name
@@ -732,15 +793,19 @@ async def run_bot() -> None:
     async def designer_article(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
         order = data["order"]
-        order["designer_wallpapers"]["article"] = message.text.strip()
+        article = message.text.strip()
+        order["designer_wallpapers"]["article"] = article
         await state.update_data(order=order)
+        if article.upper().startswith("ID-"):
+            await message.answer("Похоже, это фреска. Проверьте, пожалуйста, раздел.")
         await state.set_state(OrderFlow.designer_panel_size)
         await message.answer("Материал: Велюр.\n\nРазмер панели:", reply_markup=list_kb(config.designer_panel_sizes, "panel_size"))
 
     @router.callback_query(OrderFlow.designer_panel_size, F.data.startswith("panel_size:"))
     async def designer_panel_size(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        panel_size = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        panel_size = config.designer_panel_sizes[idx]
         data = await state.get_data()
         order = data["order"]
         order["designer_wallpapers"]["panel_size_cm"] = panel_size
@@ -757,13 +822,14 @@ async def run_bot() -> None:
         await state.set_state(OrderFlow.designer_production_type)
         await message.answer(
             "Тип производства:",
-            reply_markup=list_kb(["Единым полотном", "Порезать на панели"], "production_type"),
+            reply_markup=list_kb(["Единым полотном", "Порезать на полотна"], "production_type"),
         )
 
     @router.callback_query(OrderFlow.designer_production_type, F.data.startswith("production_type:"))
     async def designer_production_type(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        production_type = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        production_type = ["Единым полотном", "Порезать на полотна"][idx]
         data = await state.get_data()
         order = data["order"]
         order["designer_wallpapers"]["production_type"] = production_type
@@ -777,58 +843,27 @@ async def run_bot() -> None:
         data = await state.get_data()
         order = data["order"]
         order["designer_wallpapers"]["color_sample"]["required"] = callback.data == "yes"
-        if callback.data == "yes":
-            order["designer_wallpapers"]["color_sample"]["agreed_without_sample"] = False
-            await state.update_data(order=order)
-            await state.set_state(OrderFlow.designer_comment)
-            skip_kb = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_comment")]]
-            )
-            await callback.message.edit_text("Цветопроба нужна: Да\n\nКомментарии:", reply_markup=skip_kb)
-            return
         await state.update_data(order=order)
-        await state.set_state(OrderFlow.designer_color_sample_agreed)
-        await callback.message.edit_text("Цветопроба нужна: Нет\n\nСогласны без цветопробы?", reply_markup=yes_no_kb())
-
-    @router.callback_query(OrderFlow.designer_color_sample_agreed, F.data.in_(["yes", "no"]))
-    async def designer_color_sample_agreed(callback: CallbackQuery, state: FSMContext) -> None:
-        await callback.answer()
-        data = await state.get_data()
-        order = data["order"]
-        order["designer_wallpapers"]["color_sample"]["agreed_without_sample"] = callback.data == "yes"
-        await state.update_data(order=order)
-        await state.set_state(OrderFlow.designer_comment)
-        agreed_text = "Да" if callback.data == "yes" else "Нет"
-        skip_kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_comment")]]
+        sample_text = "Да" if callback.data == "yes" else "Нет"
+        await state.set_state(OrderFlow.designer_mirror)
+        await callback.message.edit_text(
+            f"Цветопроба нужна: {sample_text}\n\nОтзеркалить?",
+            reply_markup=yes_no_kb(),
         )
-        await callback.message.edit_text(f"Согласны без цветопробы: {agreed_text}\n\nКомментарии:", reply_markup=skip_kb)
 
-    @router.callback_query(OrderFlow.designer_comment, F.data == "skip_comment")
-    async def designer_comment_skip(callback: CallbackQuery, state: FSMContext) -> None:
+    @router.callback_query(OrderFlow.designer_mirror, F.data.in_(["yes", "no"]))
+    async def designer_mirror(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         data = await state.get_data()
         order = data["order"]
-        order["designer_wallpapers"]["comment"] = None
+        mirror_value = "Да" if callback.data == "yes" else "Нет"
+        order["designer_wallpapers"]["mirror"] = mirror_value
         await state.update_data(order=order)
         await state.set_state(OrderFlow.ask_background_wallpapers)
-        await callback.message.edit_text("Комментарии: пропущено\n\nХотите фоновые обои?", reply_markup=yes_no_kb())
-
-    @router.message(OrderFlow.designer_comment, F.text)
-    async def designer_comment(message: Message, state: FSMContext) -> None:
-        comment_text = message.text.strip()
-        if comment_text.lower() in {"пропустить", "пропустить", "skip", "пропуск"}:
-            comment_text = None
-            display_text = "пропущено"
-        else:
-            display_text = comment_text
-        
-        data = await state.get_data()
-        order = data["order"]
-        order["designer_wallpapers"]["comment"] = comment_text
-        await state.update_data(order=order)
-        await state.set_state(OrderFlow.ask_background_wallpapers)
-        await message.answer(f"Комментарии: {display_text}\n\nХотите фоновые обои?", reply_markup=yes_no_kb())
+        await callback.message.edit_text(
+            f"Отзеркалить: {mirror_value}\n\nХотите фоновые обои?",
+            reply_markup=yes_no_kb(),
+        )
 
     @router.callback_query(OrderFlow.ask_freski, F.data.in_(["yes", "no"]))
     async def ask_freski(callback: CallbackQuery, state: FSMContext) -> None:
@@ -838,13 +873,28 @@ async def run_bot() -> None:
         if callback.data == "yes":
             order["freski"]["enabled"] = True
             await state.update_data(order=order)
-            await state.set_state(OrderFlow.freski_article)
-            await callback.message.edit_text("Хотите фрески? Да\n\nАртикул:")
+            await state.set_state(OrderFlow.freski_catalog)
+            await callback.message.edit_text(
+                "Хотите фрески? Да\n\nКаталог:",
+                reply_markup=list_kb(config.freski_catalogs, "freski_catalog"),
+            )
         else:
             order["freski"]["enabled"] = False
             await state.update_data(order=order)
             await state.set_state(OrderFlow.ask_designer_wallpapers)
             await callback.message.edit_text("Хотите фрески? Нет\n\nХотите дизайнерские обои?", reply_markup=yes_no_kb())
+
+    @router.callback_query(OrderFlow.freski_catalog, F.data.startswith("freski_catalog:"))
+    async def freski_catalog(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        idx = int(callback.data.split(":", 1)[1])
+        catalog_name = config.freski_catalogs[idx]
+        data = await state.get_data()
+        order = data["order"]
+        order["freski"]["catalog_name"] = catalog_name
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.freski_article)
+        await callback.message.edit_text(f"Каталог: {catalog_name}\n\nАртикул:")
 
     @router.message(OrderFlow.freski_article, F.text)
     async def freski_article(message: Message, state: FSMContext) -> None:
@@ -871,21 +921,104 @@ async def run_bot() -> None:
         order["freski"]["size_cm"]["height"] = message.text.strip()
         await state.update_data(order=order)
         await state.set_state(OrderFlow.freski_material)
-        await message.answer(f"Высота, см: {message.text.strip()}\n\nМатериал:", reply_markup=list_kb(config.freski_materials, "freski_material"))
+        await message.answer(
+            f"Высота, см: {message.text.strip()}\n\nМатериал:",
+            reply_markup=list_kb(config.freski_materials, "freski_material"),
+        )
 
     @router.callback_query(OrderFlow.freski_material, F.data.startswith("freski_material:"))
     async def freski_material(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        material = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        material = config.freski_materials[idx]
         data = await state.get_data()
         order = data["order"]
         order["freski"]["material"] = material
+        await state.update_data(order=order)
+
+        if material in {"Саббия", "Саббия Фасад", "Пиетра"}:
+            await state.set_state(OrderFlow.freski_humidity)
+            await callback.message.edit_text(
+                f"Материал: {material}\n\nПомещение влажное?",
+                reply_markup=yes_no_kb(),
+            )
+            return
+
+        if material == "Кракелюр":
+            await state.set_state(OrderFlow.freski_crackle_aging)
+            await callback.message.edit_text(
+                "Кракелюр выбран.\n\nНужна средняя степень старения?",
+                reply_markup=yes_no_kb(),
+            )
+            return
+
+        if material in {"Колоре", "Колоре Лайт"}:
+            order["freski"]["color_sample"] = "Да"
+            await state.update_data(order=order)
+            await state.set_state(OrderFlow.freski_note)
+            skip_kb = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
+            )
+            await callback.message.edit_text(
+                f"Материал: {material}\n\nЦветопроба: Да\n\nПримечание:",
+                reply_markup=skip_kb,
+            )
+            return
+
+        await state.set_state(OrderFlow.freski_color_sample)
+        await callback.message.edit_text(
+            f"Материал: {material}\n\nНужна цветопроба?",
+            reply_markup=yes_no_kb(),
+        )
+
+    @router.callback_query(OrderFlow.freski_humidity, F.data.in_(["yes", "no"]))
+    async def freski_humidity(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        data = await state.get_data()
+        order = data["order"]
+        humidity = "Да" if callback.data == "yes" else "Нет"
+        order["freski"]["hydro_insulation"] = "Да" if callback.data == "yes" else "Нет"
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.freski_color_sample)
+        await callback.message.edit_text(
+            f"Помещение влажное: {humidity}\n\nНужна цветопроба?",
+            reply_markup=yes_no_kb(),
+        )
+
+    @router.callback_query(OrderFlow.freski_crackle_aging, F.data.in_(["yes", "no"]))
+    async def freski_crackle_aging(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        data = await state.get_data()
+        order = data["order"]
+        if callback.data == "yes":
+            order["freski"]["material"] = "Кракелюр средняя степень"
+            order["freski"]["crackle_aging"] = "Да"
+        else:
+            order["freski"]["material"] = "Кракелюр без старения"
+            order["freski"]["crackle_aging"] = "Нет"
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.freski_color_sample)
+        await callback.message.edit_text(
+            "Нужна цветопроба?",
+            reply_markup=yes_no_kb(),
+        )
+
+    @router.callback_query(OrderFlow.freski_color_sample, F.data.in_(["yes", "no"]))
+    async def freski_color_sample(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        data = await state.get_data()
+        order = data["order"]
+        color_sample = "Да" if callback.data == "yes" else "Нет"
+        order["freski"]["color_sample"] = color_sample
         await state.update_data(order=order)
         await state.set_state(OrderFlow.freski_note)
         skip_kb = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
         )
-        await callback.message.edit_text(f"Материал: {material}\n\nПримечание:", reply_markup=skip_kb)
+        await callback.message.edit_text(
+            f"Цветопроба: {color_sample}\n\nПримечание:",
+            reply_markup=skip_kb,
+        )
 
     @router.callback_query(OrderFlow.freski_note, F.data == "skip_note")
     async def freski_note_skip(callback: CallbackQuery, state: FSMContext) -> None:
@@ -900,7 +1033,7 @@ async def run_bot() -> None:
     @router.message(OrderFlow.freski_note, F.text)
     async def freski_note(message: Message, state: FSMContext) -> None:
         note_text = message.text.strip()
-        if note_text.lower() in {"пропустить", "пропустить", "skip", "пропуск"}:
+        if note_text.lower() in {"пропустить", "пропуск", "skip"}:
             note_text = None
             display_text = "пропущено"
         else:
@@ -922,18 +1055,40 @@ async def run_bot() -> None:
         if callback.data == "yes":
             order["background_wallpapers"]["enabled"] = True
             await state.update_data(order=order)
-            await state.set_state(OrderFlow.background_catalog)
-            await callback.message.edit_text("Хотите фоновые обои? Да\n\nКаталог:", reply_markup=list_kb(config.background_catalogs, "bg_catalog"))
+            await state.set_state(OrderFlow.background_material)
+            await callback.message.edit_text(
+                "Хотите фоновые обои? Да\n\nФактура (velure/colore):",
+                reply_markup=list_kb(config.background_materials, "bg_material"),
+            )
         else:
             order["background_wallpapers"]["enabled"] = False
             await state.update_data(order=order)
             await state.set_state(OrderFlow.ask_paintings)
-            await callback.message.edit_text("Хотите фоновые обои? Нет\n\nХотите картины из каталога фрески и индивидуальные изображения?", reply_markup=yes_no_kb())
+            await callback.message.edit_text(
+                "Хотите фоновые обои? Нет\n\nХотите картины из каталога фрески и индивидуальные изображения?",
+                reply_markup=yes_no_kb(),
+            )
+
+    @router.callback_query(OrderFlow.background_material, F.data.startswith("bg_material:"))
+    async def background_material(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        idx = int(callback.data.split(":", 1)[1])
+        material = config.background_materials[idx]
+        data = await state.get_data()
+        order = data["order"]
+        order["background_wallpapers"]["material_type"] = material
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.background_catalog)
+        await callback.message.edit_text(
+            f"Фактура: {material}\n\nКаталог:",
+            reply_markup=list_kb(config.background_catalogs, "bg_catalog"),
+        )
 
     @router.callback_query(OrderFlow.background_catalog, F.data.startswith("bg_catalog:"))
     async def background_catalog(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        catalog_name = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        catalog_name = config.background_catalogs[idx]
         data = await state.get_data()
         order = data["order"]
         order["background_wallpapers"]["catalog_name"] = catalog_name
@@ -947,20 +1102,30 @@ async def run_bot() -> None:
         order = data["order"]
         order["background_wallpapers"]["article"] = message.text.strip()
         await state.update_data(order=order)
-        await state.set_state(OrderFlow.background_material)
-        await message.answer(f"Артикул: {message.text.strip()}\n\nМатериал:", reply_markup=list_kb(config.background_materials, "bg_material"))
+        await state.set_state(OrderFlow.background_height)
+        material = order["background_wallpapers"].get("material_type", "")
+        heights = config.background_heights_velour if material == "Велюр" else config.background_heights_colore
+        heights_str = [str(h) for h in heights]
+        await message.answer(
+            f"Артикул: {message.text.strip()}\n\nВысота, см:",
+            reply_markup=list_kb(heights_str, "bg_height"),
+        )
 
-    @router.callback_query(OrderFlow.background_material, F.data.startswith("bg_material:"))
-    async def background_material(callback: CallbackQuery, state: FSMContext) -> None:
+    @router.callback_query(OrderFlow.background_height, F.data.startswith("bg_height:"))
+    async def background_height(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        material = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
         data = await state.get_data()
         order = data["order"]
-        order["background_wallpapers"]["material_type"] = material
+        material = order["background_wallpapers"].get("material_type", "")
+        heights = config.background_heights_velour if material == "Велюр" else config.background_heights_colore
+        height = str(heights[idx])
+        order["background_wallpapers"]["size_cm"]["height"] = height
         await state.update_data(order=order)
         await state.set_state(OrderFlow.background_width)
-        heights = config.background_heights_velour if material == "Велюр" else config.background_heights_colore
-        await callback.message.edit_text(f"Материал: {material}\n\nШирина, см:")
+        await callback.message.edit_text(
+            f"Высота, см: {height}\n\nШирина, см (минимум 100, далее любое значение):"
+        )
 
     @router.message(OrderFlow.background_width, F.text)
     async def background_width(message: Message, state: FSMContext) -> None:
@@ -968,22 +1133,11 @@ async def run_bot() -> None:
         order = data["order"]
         order["background_wallpapers"]["size_cm"]["width"] = message.text.strip()
         await state.update_data(order=order)
-        await state.set_state(OrderFlow.background_height)
-        material = order["background_wallpapers"].get("material_type", "")
-        heights = config.background_heights_velour if material == "Велюр" else config.background_heights_colore
-        heights_str = [str(h) for h in heights]
-        await message.answer(f"Ширина, см: {message.text.strip()}\n\nВысота, см:", reply_markup=list_kb(heights_str, "bg_height"))
-
-    @router.callback_query(OrderFlow.background_height, F.data.startswith("bg_height:"))
-    async def background_height(callback: CallbackQuery, state: FSMContext) -> None:
-        await callback.answer()
-        height = callback.data.split(":", 1)[1]
-        data = await state.get_data()
-        order = data["order"]
-        order["background_wallpapers"]["size_cm"]["height"] = height
-        await state.update_data(order=order)
         await state.set_state(OrderFlow.background_color_sample)
-        await callback.message.edit_text(f"Высота, см: {height}\n\nНужна цветопроба?", reply_markup=yes_no_kb())
+        await message.answer(
+            f"Ширина, см: {message.text.strip()}\n\nНужна цветопроба?",
+            reply_markup=yes_no_kb(),
+        )
 
     @router.callback_query(OrderFlow.background_color_sample, F.data.in_(["yes", "no"]))
     async def background_color_sample(callback: CallbackQuery, state: FSMContext) -> None:
@@ -991,58 +1145,13 @@ async def run_bot() -> None:
         data = await state.get_data()
         order = data["order"]
         order["background_wallpapers"]["color_sample"]["required"] = callback.data == "yes"
-        if callback.data == "yes":
-            order["background_wallpapers"]["color_sample"]["agreed_without_sample"] = False
-            await state.update_data(order=order)
-            await state.set_state(OrderFlow.background_comment)
-            skip_kb = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_bg_comment")]]
-            )
-            await callback.message.edit_text("Цветопроба нужна: Да\n\nКомментарии:", reply_markup=skip_kb)
-            return
         await state.update_data(order=order)
-        await state.set_state(OrderFlow.background_color_sample_agreed)
-        await callback.message.edit_text("Цветопроба нужна: Нет\n\nСогласны без цветопробы?", reply_markup=yes_no_kb())
-
-    @router.callback_query(OrderFlow.background_color_sample_agreed, F.data.in_(["yes", "no"]))
-    async def background_color_sample_agreed(callback: CallbackQuery, state: FSMContext) -> None:
-        await callback.answer()
-        data = await state.get_data()
-        order = data["order"]
-        order["background_wallpapers"]["color_sample"]["agreed_without_sample"] = callback.data == "yes"
-        await state.update_data(order=order)
-        await state.set_state(OrderFlow.background_comment)
-        agreed_text = "Да" if callback.data == "yes" else "Нет"
-        skip_kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_bg_comment")]]
+        sample_text = "Да" if callback.data == "yes" else "Нет"
+        await state.set_state(OrderFlow.ask_paintings)
+        await callback.message.edit_text(
+            f"Цветопроба нужна: {sample_text}\n\nХотите картины из каталога фрески и индивидуальные изображения?",
+            reply_markup=yes_no_kb(),
         )
-        await callback.message.edit_text(f"Согласны без цветопробы: {agreed_text}\n\nКомментарии:", reply_markup=skip_kb)
-
-    @router.callback_query(OrderFlow.background_comment, F.data == "skip_bg_comment")
-    async def background_comment_skip(callback: CallbackQuery, state: FSMContext) -> None:
-        await callback.answer()
-        data = await state.get_data()
-        order = data["order"]
-        order["background_wallpapers"]["comment"] = None
-        await state.update_data(order=order)
-        await state.set_state(OrderFlow.ask_paintings)
-        await callback.message.edit_text("Комментарии: пропущено\n\nХотите картины из каталога фрески и индивидуальные изображения?", reply_markup=yes_no_kb())
-
-    @router.message(OrderFlow.background_comment, F.text)
-    async def background_comment(message: Message, state: FSMContext) -> None:
-        comment_text = message.text.strip()
-        if comment_text.lower() in {"пропустить", "пропустить", "skip", "пропуск"}:
-            comment_text = None
-            display_text = "пропущено"
-        else:
-            display_text = comment_text
-        
-        data = await state.get_data()
-        order = data["order"]
-        order["background_wallpapers"]["comment"] = comment_text
-        await state.update_data(order=order)
-        await state.set_state(OrderFlow.ask_paintings)
-        await message.answer(f"Комментарии: {display_text}\n\nХотите картины из каталога фрески и индивидуальные изображения?", reply_markup=yes_no_kb())
 
     # Картины
     @router.callback_query(OrderFlow.ask_paintings, F.data.in_(["yes", "no"]))
@@ -1058,8 +1167,8 @@ async def run_bot() -> None:
         else:
             order["paintings"]["enabled"] = False
             await state.update_data(order=order)
-            await state.set_state(OrderFlow.ask_name)
-            await callback.message.edit_text("Хотите картины? Нет\n\nКто вы?")
+            await state.set_state(OrderFlow.ask_delivery_needed)
+            await callback.message.edit_text("Хотите картины? Нет\n\nДоставка нужна?", reply_markup=yes_no_kb())
 
     @router.message(OrderFlow.paintings_article, F.text)
     async def paintings_article(message: Message, state: FSMContext) -> None:
@@ -1103,43 +1212,98 @@ async def run_bot() -> None:
         order = data["order"]
         order["paintings"]["visible_image_size_cm"]["height"] = message.text.strip()
         await state.update_data(order=order)
-        await state.set_state(OrderFlow.ask_name)
-        await message.answer(f"Видимый размер изображения. Высота, см: {message.text.strip()}\n\nКто вы?")
+        await state.set_state(OrderFlow.ask_delivery_needed)
+        await message.answer(f"Видимый размер изображения. Высота, см: {message.text.strip()}\n\nДоставка нужна?", reply_markup=yes_no_kb())
 
-    async def finish_or_ask_email(
-        message: Message,
-        state: FSMContext,
-        user_profile: dict | None,
-    ) -> None:
+    # Доставка
+    @router.callback_query(OrderFlow.ask_delivery_needed, F.data.in_(["yes", "no"]))
+    async def ask_delivery_needed(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
         data = await state.get_data()
         order = data["order"]
-        if user_profile:
-            if user_profile.get("email"):
-                order["client"]["email"] = user_profile["email"]
-            if user_profile.get("region"):
-                order["client"]["region"] = user_profile["region"]
+        needed = "Да" if callback.data == "yes" else "Нет"
+        order["delivery"]["needed"] = needed
         await state.update_data(order=order)
+        if callback.data == "yes":
+            await state.set_state(OrderFlow.delivery_type)
+            await callback.message.edit_text(
+                "Доставка нужна: Да\n\nДо терминала ТК или до адреса?",
+                reply_markup=list_kb(["До терминала ТК", "До адреса"], "delivery_type"),
+            )
+        else:
+            await state.set_state(OrderFlow.ask_legal_entity)
+            await callback.message.edit_text("Доставка не нужна.\n\nЮрлицо (ИП/ООО):")
 
-        if not user_profile or not user_profile.get("email"):
-            await state.set_state(OrderFlow.ask_email)
-            await message.answer("Ваша электронная почта?")
-            return
-        if not user_profile.get("region"):
-            await state.set_state(OrderFlow.ask_region)
-            current_managers = reload_managers()
-            regions_list = list(current_managers.keys())
-            await message.answer("Доставка (выбор региона):", reply_markup=list_kb(regions_list, "region"))
-            return
-        await finalize_order(message, state, order)
-
-    @router.message(OrderFlow.ask_name, F.text)
-    async def ask_name(message: Message, state: FSMContext) -> None:
+    @router.callback_query(OrderFlow.delivery_type, F.data.startswith("delivery_type:"))
+    async def delivery_type(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        idx = int(callback.data.split(":", 1)[1])
+        delivery_type_value = ["До терминала ТК", "До адреса"][idx]
         data = await state.get_data()
         order = data["order"]
-        order["client"]["name"] = message.text.strip()
+        order["delivery"]["type"] = delivery_type_value
         await state.update_data(order=order)
-        profile = await ensure_user_profile(message)
-        await finish_or_ask_email(message, state, profile)
+        await state.set_state(OrderFlow.delivery_carrier)
+        await callback.message.edit_text(
+            f"Тип доставки: {delivery_type_value}\n\nТК или самовывоз:",
+            reply_markup=list_kb(config.delivery_carriers, "delivery_carrier"),
+        )
+
+    @router.callback_query(OrderFlow.delivery_carrier, F.data.startswith("delivery_carrier:"))
+    async def delivery_carrier(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        idx = int(callback.data.split(":", 1)[1])
+        carrier = config.delivery_carriers[idx]
+        data = await state.get_data()
+        order = data["order"]
+        order["delivery"]["carrier"] = carrier
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.delivery_crate)
+        await callback.message.edit_text(
+            f"ТК/Самовывоз: {carrier}\n\nОбрешетка нужна?",
+            reply_markup=yes_no_kb(),
+        )
+
+    @router.callback_query(OrderFlow.delivery_crate, F.data.in_(["yes", "no"]))
+    async def delivery_crate(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        crate_value = "Да" if callback.data == "yes" else "Нет"
+        data = await state.get_data()
+        order = data["order"]
+        order["delivery"]["crate"] = crate_value
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.ask_legal_entity)
+        await callback.message.edit_text(
+            f"Обрешетка: {crate_value}\n\nЮрлицо (ИП/ООО):"
+        )
+
+    # Финальные вопросы
+    @router.message(OrderFlow.ask_legal_entity, F.text)
+    async def ask_legal_entity(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        order = data["order"]
+        order["client"]["legal_entity"] = message.text.strip()
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.ask_city)
+        await message.answer("Город:")
+
+    @router.message(OrderFlow.ask_city, F.text)
+    async def ask_city(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        order = data["order"]
+        order["client"]["city"] = message.text.strip()
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.ask_phone)
+        await message.answer("Телефон:")
+
+    @router.message(OrderFlow.ask_phone, F.text)
+    async def ask_phone(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        order = data["order"]
+        order["client"]["phone"] = message.text.strip()
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.ask_email)
+        await message.answer("Email:")
 
     @router.message(OrderFlow.ask_email, F.text)
     async def ask_email(message: Message, state: FSMContext) -> None:
@@ -1151,17 +1315,23 @@ async def run_bot() -> None:
         await state.set_state(OrderFlow.ask_region)
         current_managers = reload_managers()
         regions_list = list(current_managers.keys())
-        await message.answer(f"Email: {email}\n\nДоставка (выбор региона):", reply_markup=list_kb(regions_list, "region"))
+        await message.answer(
+            "Выберите регион:",
+            reply_markup=list_kb(regions_list, "region"),
+        )
 
     @router.callback_query(OrderFlow.ask_region, F.data.startswith("region:"))
     async def ask_region(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
-        region = callback.data.split(":", 1)[1]
+        idx = int(callback.data.split(":", 1)[1])
+        current_managers = reload_managers()
+        regions_list = list(current_managers.keys())
+        region = regions_list[idx]
         data = await state.get_data()
         order = data["order"]
         order["client"]["region"] = region
         await state.update_data(order=order)
-        await callback.message.edit_text(f"Регион доставки: {region}")
+        await callback.message.edit_text(f"Регион: {region}")
         await finalize_order(callback.message, state, order)
 
     async def finalize_order(
