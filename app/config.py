@@ -7,6 +7,7 @@ from typing import List
 class BotConfig:
     token: str
     managers_json: str
+    texts_json: str
     freski_catalogs: List[str]
     designer_catalogs: List[str]
     designer_panel_sizes: List[str]
@@ -27,6 +28,7 @@ def load_config() -> BotConfig:
         raise RuntimeError("BOT_TOKEN is required")
 
     managers_json = os.getenv("MANAGERS_JSON", "app/managers.json")
+    texts_json = os.getenv("TEXTS_JSON", "app/texts.json")
 
     freski_catalogs = [
         "Библиотека Affresco",
@@ -132,6 +134,7 @@ def load_config() -> BotConfig:
     return BotConfig(
         token=token,
         managers_json=managers_json,
+        texts_json=texts_json,
         freski_catalogs=freski_catalogs,
         designer_catalogs=designer_catalogs,
         designer_panel_sizes=designer_panel_sizes,
