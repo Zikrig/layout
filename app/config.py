@@ -9,6 +9,7 @@ class BotConfig:
     managers_json: str
     texts_json: str
     freski_catalogs: List[str]
+    freski_library_catalogs: List[str]
     designer_catalogs: List[str]
     designer_panel_sizes: List[str]
     background_catalogs: List[str]
@@ -32,8 +33,11 @@ def load_config() -> BotConfig:
 
     freski_catalogs = [
         "Библиотека Affresco",
-        "Фрески фотообои",
         "Индивидуальная отрисовка",
+    ]
+    freski_library_catalogs = [
+        *designer_catalogs,
+        "Фрески фотообои",
     ]
 
     # Данные из questions.json - designer_wallpapers
@@ -145,6 +149,7 @@ def load_config() -> BotConfig:
         managers_json=managers_json,
         texts_json=texts_json,
         freski_catalogs=freski_catalogs,
+        freski_library_catalogs=freski_library_catalogs,
         designer_catalogs=designer_catalogs,
         designer_panel_sizes=designer_panel_sizes,
         background_catalogs=background_catalogs,

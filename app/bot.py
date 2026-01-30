@@ -23,6 +23,7 @@ class OrderFlow(StatesGroup):
     # Фрески
     ask_freski = State()
     freski_catalog = State()
+    freski_library_catalog = State()
     freski_article = State()
     freski_width = State()
     freski_height = State()
@@ -151,6 +152,32 @@ async def render_step(
     back_mode = data.get("back_mode", False)
     nav = nav_kb(show_back=True, show_continue=back_mode)
     full_kb = merge_kb(reply_markup, nav) if include_nav else reply_markup
+
+    # Если есть фото комментария фресок - прикрепляем в черновике
+    note_photo = order.get("freski", {}).get("note_photo")
+    photo_message_id = data.get("order_photo_message_id")
+    photo_file_id = data.get("order_photo_file_id")
+    if note_photo:
+        if not photo_message_id:
+            sent_photo = await message.answer_photo(
+                note_photo,
+                caption="Фото из комментария",
+            )
+            await state.update_data(
+                order_photo_message_id=sent_photo.message_id,
+                order_photo_file_id=note_photo,
+            )
+        elif photo_file_id != note_photo:
+            await message.bot.edit_message_media(
+                chat_id=message.chat.id,
+                message_id=photo_message_id,
+                media={"type": "photo", "media": note_photo, "caption": "Фото из комментария"},
+            )
+            await state.update_data(order_photo_file_id=note_photo)
+    else:
+        if photo_message_id:
+            await message.bot.delete_message(message.chat.id, photo_message_id)
+            await state.update_data(order_photo_message_id=None, order_photo_file_id=None)
 
     message_id = data.get("order_message_id")
     chat_id = message.chat.id
@@ -1282,6 +1309,34 @@ async def run_bot() -> None:
         catalog_name = config.freski_catalogs[idx]
         data = await state.get_data()
         order = data["order"]
+        if catalog_name == "Библиотека Affresco":
+            order["freski"]["catalog_name"] = catalog_name
+            await state.update_data(order=order)
+            await go_to_state(
+                callback.message,
+                state,
+                OrderFlow.freski_library_catalog,
+                "Библиотека Affresco\n\nКаталог:",
+                list_kb(config.freski_library_catalogs, "freski_library_catalog"),
+            )
+            return
+
+        order["freski"]["catalog_name"] = "Индивидуальная отрисовка"
+        await state.update_data(order=order)
+        await go_to_state(
+            callback.message,
+            state,
+            OrderFlow.freski_article,
+            "Индивидуальная отрисовка\n\nАртикул:",
+        )
+
+    @router.callback_query(OrderFlow.freski_library_catalog, F.data.startswith("freski_library_catalog:"))
+    async def freski_library_catalog(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        idx = int(callback.data.split(":", 1)[1])
+        catalog_name = config.freski_library_catalogs[idx]
+        data = await state.get_data()
+        order = data["order"]
         order["freski"]["catalog_name"] = catalog_name
         await state.update_data(order=order)
         await go_to_state(
@@ -1443,6 +1498,7 @@ async def run_bot() -> None:
         data = await state.get_data()
         order = data["order"]
         order["freski"]["note"] = None
+        order["freski"]["note_photo"] = None
         await state.update_data(order=order)
         await go_to_state(
             callback.message,
@@ -1493,6 +1549,8 @@ async def run_bot() -> None:
         data = await state.get_data()
         order = data["order"]
         order["freski"]["note"] = note_text
+        if note_text is None:
+            order["freski"]["note_photo"] = None
         await state.update_data(order=order)
         await go_to_state(
             message,
@@ -2047,6 +2105,8 @@ async def run_bot() -> None:
         
         await state.clear()
         await message.answer(user_message)
+        if note_photo:
+            await message.answer_photo(note_photo, caption="Фото из комментария")
 
     dp = Dispatcher()
     dp.include_router(router)
