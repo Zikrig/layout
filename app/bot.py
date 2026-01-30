@@ -24,7 +24,6 @@ class OrderFlow(StatesGroup):
     ask_freski = State()
     freski_catalog = State()
     freski_library_catalog = State()
-    freski_article = State()
     freski_width = State()
     freski_height = State()
     freski_material = State()
@@ -355,8 +354,6 @@ def format_user_summary(order: dict[str, Any]) -> str:
         lines.append("ФРЕСКИ")
         if freski.get("catalog_name"):
             lines.append(f"Каталог: {safe_value(freski.get('catalog_name'))}")
-        if freski.get("article"):
-            lines.append(f"Артикул: {safe_value(freski.get('article'))}")
         if size.get("width"):
             lines.append(f"Ширина, см: {safe_value(size.get('width'))}")
         if size.get("height"):
@@ -487,7 +484,6 @@ def format_summary(order: dict[str, Any]) -> str:
             [
                 "ФРЕСКИ: Да",
                 f"Каталог: {safe_value(freski.get('catalog_name'))}",
-                f"Артикул: {safe_value(freski.get('article'))}",
                 f"Ширина, см: {safe_value(size.get('width'))}",
                 f"Высота, см: {safe_value(size.get('height'))}",
                 f"Материал: {safe_value(freski.get('material'))}",
@@ -625,7 +621,6 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
         "freski": {
             "enabled": False,
             "catalog_name": None,
-            "article": None,
             "size_cm": {"width": None, "height": None},
             "material": None,
             "color_sample": None,
@@ -1326,8 +1321,8 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.freski_article,
-            "Индивидуальная отрисовка\n\nАртикул:",
+            OrderFlow.freski_width,
+            "Индивидуальная отрисовка\n\nШирина, см:",
         )
 
     @router.callback_query(OrderFlow.freski_library_catalog, F.data.startswith("freski_library_catalog:"))
@@ -1342,21 +1337,8 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.freski_article,
-            f"Каталог: {catalog_name}\n\nАртикул:",
-        )
-
-    @router.message(OrderFlow.freski_article, F.text)
-    async def freski_article(message: Message, state: FSMContext) -> None:
-        data = await state.get_data()
-        order = data["order"]
-        order["freski"]["article"] = message.text.strip()
-        await state.update_data(order=order)
-        await go_to_state(
-            message,
-            state,
             OrderFlow.freski_width,
-            "Ширина, см:",
+            f"Каталог: {catalog_name}\n\nШирина, см:",
         )
 
     @router.message(OrderFlow.freski_width, F.text)
