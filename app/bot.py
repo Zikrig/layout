@@ -1917,10 +1917,10 @@ async def run_bot() -> None:
         if len(region_managers) > 1:
             await state.update_data(order=order)
             await state.set_state(OrderFlow.ask_manager_choice)
-        manager_labels = [
-            f"{m.name or m.email or 'Менеджер'} ({m.email or 'без email'})"
-            for m in region_managers
-        ]
+            manager_labels = [
+                f"{m.name or m.email or 'Менеджер'} ({m.email or 'без email'})"
+                for m in region_managers
+            ]
             await render_step(
                 callback.message,
                 state,
