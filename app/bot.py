@@ -152,32 +152,6 @@ async def render_step(
     nav = nav_kb(show_back=True, show_continue=back_mode)
     full_kb = merge_kb(reply_markup, nav) if include_nav else reply_markup
 
-    # Если есть фото комментария фресок - прикрепляем в черновике
-    note_photo = order.get("freski", {}).get("note_photo")
-    photo_message_id = data.get("order_photo_message_id")
-    photo_file_id = data.get("order_photo_file_id")
-    if note_photo:
-        if not photo_message_id:
-            sent_photo = await message.answer_photo(
-                note_photo,
-                caption="Фото из комментария",
-            )
-            await state.update_data(
-                order_photo_message_id=sent_photo.message_id,
-                order_photo_file_id=note_photo,
-            )
-        elif photo_file_id != note_photo:
-            await message.bot.edit_message_media(
-                chat_id=message.chat.id,
-                message_id=photo_message_id,
-                media={"type": "photo", "media": note_photo, "caption": "Фото из комментария"},
-            )
-            await state.update_data(order_photo_file_id=note_photo)
-    else:
-        if photo_message_id:
-            await message.bot.delete_message(message.chat.id, photo_message_id)
-            await state.update_data(order_photo_message_id=None, order_photo_file_id=None)
-
     message_id = data.get("order_message_id")
     chat_id = message.chat.id
     if message_id:
@@ -200,6 +174,23 @@ async def render_step(
             "order_snapshot": deepcopy(order),
         }
     )
+
+
+async def acknowledge_and_cleanup(message: Message) -> None:
+    try:
+        temp = await message.answer(
+            "Спасибо! Ответ принят! Мы освободим место через 3..."
+        )
+        await asyncio.sleep(1)
+        await temp.edit_text("Спасибо! Ответ принят! Мы освободим место через 2...")
+        await asyncio.sleep(1)
+        await temp.edit_text("Спасибо! Ответ принят! Мы освободим место через 1...")
+        await asyncio.sleep(1)
+        await message.bot.delete_message(message.chat.id, temp.message_id)
+        await message.bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        # Не критично, если не удалось удалить сообщение
+        pass
 
 
 async def push_current_step(state: FSMContext) -> None:
@@ -1191,6 +1182,7 @@ async def run_bot() -> None:
             "Материал: Велюр.\n\nРазмер панели:",
             list_kb(config.designer_panel_sizes, "panel_size"),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.designer_panel_size, F.data.startswith("panel_size:"))
     async def designer_panel_size(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1221,6 +1213,7 @@ async def run_bot() -> None:
             "Тип производства:",
             list_kb(["Единым полотном", "Порезать на полотна"], "production_type"),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.designer_production_type, F.data.startswith("production_type:"))
     async def designer_production_type(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1353,6 +1346,7 @@ async def run_bot() -> None:
             OrderFlow.freski_height,
             "Высота, см:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.freski_height, F.text)
     async def freski_height(message: Message, state: FSMContext) -> None:
@@ -1367,6 +1361,7 @@ async def run_bot() -> None:
             "Материал:",
             list_kb(config.freski_materials, "freski_material"),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.freski_material, F.data.startswith("freski_material:"))
     async def freski_material(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1518,6 +1513,7 @@ async def run_bot() -> None:
             "Фото прикреплено.\n\nДоставка нужна?",
             yes_no_kb(),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.freski_note, F.text)
     async def freski_note(message: Message, state: FSMContext) -> None:
@@ -1541,6 +1537,7 @@ async def run_bot() -> None:
             f"Примечание: {display_text}\n\nДоставка нужна?",
             yes_no_kb(),
         )
+        await acknowledge_and_cleanup(message)
 
     # Фоновые обои
     @router.callback_query(OrderFlow.ask_background_wallpapers, F.data.in_(["yes", "no"]))
@@ -1618,6 +1615,7 @@ async def run_bot() -> None:
             "Высота, см:",
             list_kb(heights_str, "bg_height"),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.background_height, F.data.startswith("bg_height:"))
     async def background_height(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1650,6 +1648,7 @@ async def run_bot() -> None:
             "Нужна цветопроба?",
             yes_no_kb(),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.background_color_sample, F.data.in_(["yes", "no"]))
     async def background_color_sample(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1705,6 +1704,7 @@ async def run_bot() -> None:
             OrderFlow.paintings_canvas_width,
             "Полный размер холста. Ширина, см:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.paintings_canvas_width, F.text)
     async def paintings_canvas_width(message: Message, state: FSMContext) -> None:
@@ -1718,6 +1718,7 @@ async def run_bot() -> None:
             OrderFlow.paintings_canvas_height,
             "Полный размер холста. Высота, см:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.paintings_canvas_height, F.text)
     async def paintings_canvas_height(message: Message, state: FSMContext) -> None:
@@ -1731,6 +1732,7 @@ async def run_bot() -> None:
             OrderFlow.paintings_visible_width,
             "Видимый размер изображения. Ширина, см:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.paintings_visible_width, F.text)
     async def paintings_visible_width(message: Message, state: FSMContext) -> None:
@@ -1744,6 +1746,7 @@ async def run_bot() -> None:
             OrderFlow.paintings_visible_height,
             "Видимый размер изображения. Высота, см:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.paintings_visible_height, F.text)
     async def paintings_visible_height(message: Message, state: FSMContext) -> None:
@@ -1758,6 +1761,7 @@ async def run_bot() -> None:
             "Доставка нужна?",
             yes_no_kb(),
         )
+        await acknowledge_and_cleanup(message)
 
     # Доставка
     @router.callback_query(OrderFlow.ask_delivery_needed, F.data.in_(["yes", "no"]))
@@ -1850,13 +1854,23 @@ async def run_bot() -> None:
         order = data["order"]
         order["delivery"]["carrier"] = carrier
         await state.update_data(order=order)
-        await go_to_state(
-            callback.message,
-            state,
-            OrderFlow.delivery_crate,
-            "Обрешетка нужна?",
-            yes_no_kb(),
-        )
+        if carrier in {"Курьерская Москва", "Самовывоз"}:
+            order["delivery"]["crate"] = None
+            await state.update_data(order=order)
+            await go_to_state(
+                callback.message,
+                state,
+                OrderFlow.ask_legal_entity,
+                "Юрлицо (ИП/ООО):",
+            )
+        else:
+            await go_to_state(
+                callback.message,
+                state,
+                OrderFlow.delivery_crate,
+                "Обрешетка нужна?",
+                yes_no_kb(),
+            )
 
     @router.callback_query(OrderFlow.delivery_crate, F.data.in_(["yes", "no"]))
     async def delivery_crate(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1886,6 +1900,7 @@ async def run_bot() -> None:
             OrderFlow.ask_city,
             "Город:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.ask_city, F.text)
     async def ask_city(message: Message, state: FSMContext) -> None:
@@ -1899,6 +1914,7 @@ async def run_bot() -> None:
             OrderFlow.ask_phone,
             "Телефон:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.ask_phone, F.text)
     async def ask_phone(message: Message, state: FSMContext) -> None:
@@ -1912,6 +1928,7 @@ async def run_bot() -> None:
             OrderFlow.ask_email,
             "Email:",
         )
+        await acknowledge_and_cleanup(message)
 
     @router.message(OrderFlow.ask_email, F.text)
     async def ask_email(message: Message, state: FSMContext) -> None:
@@ -1929,6 +1946,7 @@ async def run_bot() -> None:
             "Выберите регион:",
             list_kb(regions_list, "region"),
         )
+        await acknowledge_and_cleanup(message)
 
     @router.callback_query(OrderFlow.ask_region, F.data.startswith("region:"))
     async def ask_region(callback: CallbackQuery, state: FSMContext) -> None:
