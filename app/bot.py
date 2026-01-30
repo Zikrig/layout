@@ -81,7 +81,8 @@ class OrderFlow(StatesGroup):
 @dataclass(frozen=True)
 class ManagerInfo:
     name: str | None
-    chat_id: int
+    email: str | None
+    chat_id: int | None
 
 
 def yes_no_kb() -> InlineKeyboardMarkup:
@@ -228,15 +229,17 @@ def load_managers(path: str) -> dict[str, list[ManagerInfo]]:
         normalized: list[ManagerInfo] = []
         for manager in managers:
             if isinstance(manager, dict):
-                chat_id = int(manager.get("chat_id"))
+                chat_id_raw = manager.get("chat_id")
+                chat_id = int(chat_id_raw) if chat_id_raw not in (None, "") else None
                 normalized.append(
                     ManagerInfo(
                         name=manager.get("name"),
+                        email=manager.get("email"),
                         chat_id=chat_id,
                     )
                 )
             else:
-                normalized.append(ManagerInfo(name=None, chat_id=int(manager)))
+                normalized.append(ManagerInfo(name=None, email=None, chat_id=int(manager)))
         result[region] = normalized
     return result
 
@@ -247,9 +250,13 @@ def save_managers(path: str, managers_map: dict[str, list[ManagerInfo]]) -> None
     for region, managers_list in managers_map.items():
         managers_data = []
         for manager in managers_list:
-            manager_dict = {"chat_id": manager.chat_id}
+            manager_dict: dict[str, Any] = {}
+            if manager.chat_id is not None:
+                manager_dict["chat_id"] = manager.chat_id
             if manager.name:
                 manager_dict["name"] = manager.name
+            if manager.email:
+                manager_dict["email"] = manager.email
             managers_data.append(manager_dict)
         regions_list.append({"region": region, "managers": managers_data})
     
@@ -281,6 +288,10 @@ def is_admin(user_id: int, admin_ids: list[int]) -> bool:
 def safe_value(value: Any) -> str:
     if value is None:
         return "-"
+    if value is True:
+        return "Да"
+    if value is False:
+        return "Нет"
     text = str(value).strip()
     return text if text else "-"
 
@@ -333,6 +344,8 @@ def format_user_summary(order: dict[str, Any]) -> str:
             lines.append(f"Старение: {safe_value(freski.get('crackle_aging'))}")
         if freski.get("note") is not None:
             lines.append(f"Примечание: {safe_value(freski.get('note'))}")
+        if freski.get("note_photo"):
+            lines.append("Фото: прикреплено")
         lines.append("")
 
     # Дизайнерские обои - только если enabled
@@ -455,6 +468,7 @@ def format_summary(order: dict[str, Any]) -> str:
                 f"Гидроизоляция: {safe_value(freski.get('hydro_insulation'))}",
                 f"Старение: {safe_value(freski.get('crackle_aging'))}",
                 f"Примечание: {safe_value(freski.get('note'))}",
+                f"Фото: {'есть' if freski.get('note_photo') else '-'}",
                 "",
             ]
         )
@@ -591,6 +605,7 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
             "hydro_insulation": None,
             "crackle_aging": None,
             "note": None,
+            "note_photo": None,
         },
         "designer_wallpapers": {
             "enabled": False,
@@ -873,9 +888,10 @@ async def run_bot() -> None:
         
         buttons = []
         for idx, manager in enumerate(region_managers):
-            name = manager.name or "Без имени"
+            name = manager.name or manager.email or "Без имени"
+            chat_label = f"ID: {manager.chat_id}" if manager.chat_id else "ID: нет"
             buttons.append([InlineKeyboardButton(
-                text=f"{name} (ID: {manager.chat_id})",
+                text=f"{name} ({chat_label})",
                 callback_data=f"admin_manager:{region}:{idx}"
             )])
         buttons.append([InlineKeyboardButton(text="Добавить менеджера", callback_data=f"admin_add_manager:{region}")])
@@ -905,9 +921,10 @@ async def run_bot() -> None:
                 [InlineKeyboardButton(text="Назад", callback_data=f"admin_edit:{region}")],
             ]
         )
-        name = manager.name or "Без имени"
+        name = manager.name or manager.email or "Без имени"
+        chat_label = manager.chat_id if manager.chat_id else "нет"
         await callback.message.edit_text(
-            f"Менеджер:\nИмя: {name}\nID: {manager.chat_id}\n\nЧто изменить?",
+            f"Менеджер:\nИмя: {name}\nID: {chat_label}\n\nЧто изменить?",
             reply_markup=kb
         )
 
@@ -957,7 +974,11 @@ async def run_bot() -> None:
         else:
             # Изменяем существующего
             manager = current_managers[region][manager_idx]
-            current_managers[region][manager_idx] = ManagerInfo(name=new_name, chat_id=manager.chat_id)
+            current_managers[region][manager_idx] = ManagerInfo(
+                name=new_name,
+                email=manager.email,
+                chat_id=manager.chat_id,
+            )
             save_managers(config.managers_json, current_managers)
             await state.clear()
             await message.answer(f"Имя менеджера изменено на: {new_name}")
@@ -999,7 +1020,9 @@ async def run_bot() -> None:
             # Добавляем нового менеджера
             if region not in current_managers:
                 current_managers[region] = []
-            current_managers[region].append(ManagerInfo(name=new_name, chat_id=new_chat_id))
+            current_managers[region].append(
+                ManagerInfo(name=new_name, email=None, chat_id=new_chat_id)
+            )
             save_managers(config.managers_json, current_managers)
             await state.clear()
             await message.answer(f"Менеджер добавлен:\nИмя: {new_name}\nID: {new_chat_id}")
@@ -1007,7 +1030,11 @@ async def run_bot() -> None:
         else:
             # Изменяем существующего
             manager = current_managers[region][manager_idx]
-            current_managers[region][manager_idx] = ManagerInfo(name=manager.name, chat_id=new_chat_id)
+            current_managers[region][manager_idx] = ManagerInfo(
+                name=manager.name,
+                email=manager.email,
+                chat_id=new_chat_id,
+            )
             save_managers(config.managers_json, current_managers)
             await state.clear()
             await message.answer(f"Chat ID менеджера изменен на: {new_chat_id}")
@@ -1026,7 +1053,7 @@ async def run_bot() -> None:
         
         current_managers = reload_managers()
         manager = current_managers[region][manager_idx]
-        name = manager.name or "Без имени"
+        name = manager.name or manager.email or "Без имени"
         
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1035,7 +1062,7 @@ async def run_bot() -> None:
             ]
         )
         await callback.message.edit_text(
-            f"Вы уверены, что хотите удалить менеджера:\nИмя: {name}\nID: {manager.chat_id}?",
+            f"Вы уверены, что хотите удалить менеджера:\nИмя: {name}\nID: {manager.chat_id or 'нет'}?",
             reply_markup=kb
         )
 
@@ -1422,6 +1449,35 @@ async def run_bot() -> None:
             state,
             OrderFlow.ask_delivery_needed,
             "Примечание: пропущено\n\nДоставка нужна?",
+            yes_no_kb(),
+        )
+
+    @router.message(OrderFlow.freski_note, F.photo)
+    async def freski_note_photo(message: Message, state: FSMContext) -> None:
+        photo = message.photo[-1]
+        if photo.file_size and photo.file_size > 20 * 1024 * 1024:
+            await render_step(
+                message,
+                state,
+                "Файл больше 20 МБ. Пожалуйста, отправьте фото меньшего размера.\n\nПримечание:",
+                InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
+                ),
+            )
+            return
+        data = await state.get_data()
+        order = data["order"]
+        note_text = message.caption.strip() if message.caption else None
+        if note_text and note_text.lower() in {"пропустить", "пропуск", "skip"}:
+            note_text = None
+        order["freski"]["note"] = note_text
+        order["freski"]["note_photo"] = photo.file_id
+        await state.update_data(order=order)
+        await go_to_state(
+            message,
+            state,
+            OrderFlow.ask_delivery_needed,
+            "Фото прикреплено.\n\nДоставка нужна?",
             yes_no_kb(),
         )
 
@@ -1849,21 +1905,22 @@ async def run_bot() -> None:
         if len(region_managers) == 1:
             manager = region_managers[0]
             order["client"]["manager_chat_id"] = manager.chat_id
-            order["client"]["manager_name"] = manager.name
+            order["client"]["manager_name"] = manager.name or manager.email
             await state.update_data(order=order)
             await render_step(
                 callback.message,
                 state,
-                f"Регион: {region}\n\nМенеджер: {manager.name or manager.chat_id}",
+                f"Регион: {region}\n\nМенеджер: {manager.name or manager.email or manager.chat_id}",
             )
             await finalize_order(callback.message, state, order)
             return
         if len(region_managers) > 1:
             await state.update_data(order=order)
             await state.set_state(OrderFlow.ask_manager_choice)
-            manager_labels = [
-                f"{m.name or 'Менеджер'} (ID: {m.chat_id})" for m in region_managers
-            ]
+        manager_labels = [
+            f"{m.name or m.email or 'Менеджер'} ({m.email or 'без email'})"
+            for m in region_managers
+        ]
             await render_step(
                 callback.message,
                 state,
@@ -1902,9 +1959,13 @@ async def run_bot() -> None:
             return
         manager = region_managers[idx]
         order["client"]["manager_chat_id"] = manager.chat_id
-        order["client"]["manager_name"] = manager.name or f"ID {manager.chat_id}"
+        order["client"]["manager_name"] = manager.name or manager.email or f"ID {manager.chat_id}"
         await state.update_data(order=order)
-        await render_step(callback.message, state, f"Менеджер: {manager.name or manager.chat_id}")
+        await render_step(
+            callback.message,
+            state,
+            f"Менеджер: {manager.name or manager.email or manager.chat_id}",
+        )
         await finalize_order(callback.message, state, order)
 
     async def finalize_order(
@@ -1925,14 +1986,25 @@ async def run_bot() -> None:
         if selected_manager_id:
             target_managers = [m for m in manager_list if m.chat_id == selected_manager_id]
 
+        note_photo = order.get("freski", {}).get("note_photo")
         if target_managers:
             for manager in target_managers:
+                if not manager.chat_id:
+                    manager_label = manager.name or manager.email or "Без имени"
+                    manager_errors.append(f"{manager_label}: нет Telegram chat_id")
+                    continue
                 try:
                     await message.bot.send_message(manager.chat_id, summary)
+                    if note_photo:
+                        await message.bot.send_photo(
+                            manager.chat_id,
+                            note_photo,
+                            caption="Фото из комментариев",
+                        )
                     successful_sends += 1
                 except Exception as e:
                     error_msg = str(e)
-                    manager_name = manager.name or f"ID {manager.chat_id}"
+                    manager_name = manager.name or manager.email or f"ID {manager.chat_id}"
                     manager_errors.append(f"{manager_name} (ID: {manager.chat_id}): {error_msg}")
                     logging.error(f"Failed to send message to manager {manager.chat_id}: {e}")
         
@@ -1952,6 +2024,12 @@ async def run_bot() -> None:
                 for admin_id in config.admin_ids:
                     try:
                         await message.bot.send_message(admin_id, admin_summary)
+                        if note_photo:
+                            await message.bot.send_photo(
+                                admin_id,
+                                note_photo,
+                                caption="Фото из комментариев",
+                            )
                         logging.info(f"✓ Successfully sent order summary to admin {admin_id}")
                     except Exception as e:
                         logging.error(f"✗ Failed to send message to admin {admin_id}: {e}")

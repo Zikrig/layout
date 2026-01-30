@@ -1,25 +1,77 @@
 {
   "regions": [
     {
-      "region": "Москва",
+      "region": "ДФО",
       "managers": [
-        {
-          "chat_id": 123456789,
-          "name": "Иван"
-        },
-        {
-          "chat_id": 555,
-          "name": "Виталий"
-        }
+        { "name": "ДФО", "email": "dfo@affresco.ru" }
       ]
     },
     {
-      "region": "Санкт-Петербург",
+      "region": "Зарубежье",
       "managers": [
-        {
-          "chat_id": 987654321,
-          "name": "Мария"
-        }
+        { "name": "Зарубежье", "email": "region@affresco.ru" }
+      ]
+    },
+    {
+      "region": "Крым",
+      "managers": [
+        { "name": "Крым", "email": "krym@affresco.ru" }
+      ]
+    },
+    {
+      "region": "Москва",
+      "managers": [
+        { "name": "Гусева Мария", "email": "import@affresco.ru" },
+        { "name": "Захарова Наталья", "email": "moscow2@affresco.ru" }
+      ]
+    },
+    {
+      "region": "ПФО",
+      "managers": [
+        { "name": "Вторникова Наталья", "email": "region5@affresco.ru" },
+        { "name": "Фунтова Наталья", "email": "region6@affresco.ru" }
+      ]
+    },
+    {
+      "region": "СЗФО",
+      "managers": [
+        { "name": "СЗФО", "email": "szfo@affresco.ru" }
+      ]
+    },
+    {
+      "region": "СПб",
+      "managers": [
+        { "name": "СПб", "email": "region7@affresco.ru" }
+      ]
+    },
+    {
+      "region": "СФО",
+      "managers": [
+        { "name": "СФО", "email": "region3@affresco.ru" }
+      ]
+    },
+    {
+      "region": "УФО",
+      "managers": [
+        { "name": "УФО", "email": "region8@affresco.ru" }
+      ]
+    },
+    {
+      "region": "ЦФО",
+      "managers": [
+        { "name": "ЦФО", "email": "region4@affresco.ru" }
+      ]
+    },
+    {
+      "region": "ЮФО",
+      "managers": [
+        { "name": "ЮФО", "email": "region2@affresco.ru" }
+      ]
+    },
+    {
+      "region": "ЮФО Краснодарский край",
+      "managers": [
+        { "name": "ЮФО Краснодарский край", "email": "region1@affresco.ru" }
       ]
     }
   ]
