@@ -1177,7 +1177,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.designer_article,
-            f"Каталог: {catalog_name}\n\nАртикул:",
+            "Артикул:",
         )
 
     @router.message(OrderFlow.designer_article, F.text)
@@ -1210,7 +1210,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.designer_panel_order,
-            f"Размер панели: {panel_size}\n\nПорядок панелей слева направо:",
+            "Порядок панелей слева направо:",
         )
 
     @router.message(OrderFlow.designer_panel_order, F.text)
@@ -1240,7 +1240,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.designer_color_sample,
-            f"Тип производства: {production_type}\n\nНужна цветопроба?",
+            "Нужна цветопроба?",
             yes_no_kb(),
         )
 
@@ -1256,7 +1256,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.designer_mirror,
-            f"Цветопроба нужна: {sample_text}\n\nОтзеркалить?",
+            "Отзеркалить?",
             yes_no_kb(),
         )
 
@@ -1272,7 +1272,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.ask_delivery_needed,
-            f"Отзеркалить: {mirror_value}\n\nДоставка нужна?",
+            "Доставка нужна?",
             yes_no_kb(),
         )
 
@@ -1356,7 +1356,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.freski_width,
-            f"Артикул: {message.text.strip()}\n\nШирина, см:",
+            "Ширина, см:",
         )
 
     @router.message(OrderFlow.freski_width, F.text)
@@ -1369,7 +1369,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.freski_height,
-            f"Ширина, см: {message.text.strip()}\n\nВысота, см:",
+            "Высота, см:",
         )
 
     @router.message(OrderFlow.freski_height, F.text)
@@ -1382,7 +1382,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.freski_material,
-            f"Высота, см: {message.text.strip()}\n\nМатериал:",
+            "Материал:",
             list_kb(config.freski_materials, "freski_material"),
         )
 
@@ -1600,7 +1600,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.background_catalog,
-            f"Фактура: {material}\n\nКаталог:",
+            "Каталог:",
             list_kb(config.background_catalogs, "bg_catalog"),
         )
 
@@ -1617,7 +1617,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.background_article,
-            f"Каталог: {catalog_name}\n\nАртикул:",
+            "Артикул:",
         )
 
     @router.message(OrderFlow.background_article, F.text)
@@ -1633,7 +1633,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.background_height,
-            f"Артикул: {message.text.strip()}\n\nВысота, см:",
+            "Высота, см:",
             list_kb(heights_str, "bg_height"),
         )
 
@@ -1652,7 +1652,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.background_width,
-            f"Высота, см: {height}\n\nШирина, см (минимум 100, далее любое значение):",
+            "Ширина, см (минимум 100, далее любое значение):",
         )
 
     @router.message(OrderFlow.background_width, F.text)
@@ -1665,7 +1665,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.background_color_sample,
-            f"Ширина, см: {message.text.strip()}\n\nНужна цветопроба?",
+            "Нужна цветопроба?",
             yes_no_kb(),
         )
 
@@ -1681,7 +1681,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.ask_delivery_needed,
-            f"Цветопроба нужна: {sample_text}\n\nДоставка нужна?",
+            "Доставка нужна?",
             yes_no_kb(),
         )
 
@@ -1721,7 +1721,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.paintings_canvas_width,
-            f"Артикул: {message.text.strip()}\n\nПолный размер холста. Ширина, см:",
+            "Полный размер холста. Ширина, см:",
         )
 
     @router.message(OrderFlow.paintings_canvas_width, F.text)
@@ -1734,7 +1734,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.paintings_canvas_height,
-            f"Полный размер холста. Ширина, см: {message.text.strip()}\n\nПолный размер холста. Высота, см:",
+            "Полный размер холста. Высота, см:",
         )
 
     @router.message(OrderFlow.paintings_canvas_height, F.text)
@@ -1747,7 +1747,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.paintings_visible_width,
-            f"Полный размер холста. Высота, см: {message.text.strip()}\n\nВидимый размер изображения. Ширина, см:",
+            "Видимый размер изображения. Ширина, см:",
         )
 
     @router.message(OrderFlow.paintings_visible_width, F.text)
@@ -1760,7 +1760,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.paintings_visible_height,
-            f"Видимый размер изображения. Ширина, см: {message.text.strip()}\n\nВидимый размер изображения. Высота, см:",
+            "Видимый размер изображения. Высота, см:",
         )
 
     @router.message(OrderFlow.paintings_visible_height, F.text)
@@ -1773,7 +1773,7 @@ async def run_bot() -> None:
             message,
             state,
             OrderFlow.ask_delivery_needed,
-            f"Видимый размер изображения. Высота, см: {message.text.strip()}\n\nДоставка нужна?",
+            "Доставка нужна?",
             yes_no_kb(),
         )
 
@@ -1791,7 +1791,7 @@ async def run_bot() -> None:
                 callback.message,
                 state,
                 OrderFlow.delivery_type,
-                "Доставка нужна: Да\n\nДо терминала ТК или до адреса?",
+                "До терминала ТК или до адреса?",
                 list_kb(["До терминала ТК", "До адреса"], "delivery_type"),
             )
         else:
@@ -1799,7 +1799,7 @@ async def run_bot() -> None:
                 callback.message,
                 state,
                 OrderFlow.ask_legal_entity,
-                "Доставка не нужна.\n\nЮрлицо (ИП/ООО):",
+                "Юрлицо (ИП/ООО):",
             )
 
     @router.callback_query(F.data == "nav:back")
@@ -1855,7 +1855,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.delivery_carrier,
-            f"Тип доставки: {delivery_type_value}\n\nТК или самовывоз:",
+            "ТК или самовывоз:",
             list_kb(config.delivery_carriers, "delivery_carrier"),
         )
 
@@ -1872,7 +1872,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.delivery_crate,
-            f"ТК/Самовывоз: {carrier}\n\nОбрешетка нужна?",
+            "Обрешетка нужна?",
             yes_no_kb(),
         )
 
@@ -1888,7 +1888,7 @@ async def run_bot() -> None:
             callback.message,
             state,
             OrderFlow.ask_legal_entity,
-            f"Обрешетка: {crate_value}\n\nЮрлицо (ИП/ООО):"
+            "Юрлицо (ИП/ООО):"
         )
 
     # Финальные вопросы
