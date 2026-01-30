@@ -31,15 +31,6 @@ def load_config() -> BotConfig:
     managers_json = os.getenv("MANAGERS_JSON", "app/managers.json")
     texts_json = os.getenv("TEXTS_JSON", "app/texts.json")
 
-    freski_catalogs = [
-        "Библиотека Affresco",
-        "Индивидуальная отрисовка",
-    ]
-    freski_library_catalogs = [
-        *designer_catalogs,
-        "Фрески фотообои",
-    ]
-
     # Данные из questions.json - designer_wallpapers
     designer_catalogs = [
         "Labirint",
@@ -60,6 +51,15 @@ def load_config() -> BotConfig:
         "New Art",
         "Re-Space",
         "Art Fabric",
+    ]
+
+    freski_catalogs = [
+        "Библиотека Affresco",
+        "Индивидуальная отрисовка",
+    ]
+    freski_library_catalogs = [
+        *designer_catalogs,
+        "Фрески фотообои",
     ]
 
     designer_panel_sizes = [
