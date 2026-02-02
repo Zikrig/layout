@@ -21,6 +21,10 @@ class BotConfig:
     delivery_default_city: str
     admin_ids: List[int]
     forward_to_admins: bool
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: str
 
 
 def load_config() -> BotConfig:
@@ -144,6 +148,11 @@ def load_config() -> BotConfig:
     # Пересылка заявок админам
     forward_to_admins = os.getenv("FORWARD_TO_ADMINS", "true").strip().lower() in ("true", "1", "yes")
 
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587").strip() or "587")
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+
     return BotConfig(
         token=token,
         managers_json=managers_json,
@@ -161,5 +170,9 @@ def load_config() -> BotConfig:
         delivery_default_city=delivery_default_city,
         admin_ids=admin_ids,
         forward_to_admins=forward_to_admins,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user,
+        smtp_password=smtp_password,
     )
 

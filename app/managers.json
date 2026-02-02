@@ -1,6 +1,18 @@
 {
   "regions": [
     {
+      "region": "support@affresco.ru",
+      "managers": [
+        { "name": "support@affresco.ru", "email": "support@affresco.ru" }
+      ]
+    },
+    {
+      "region": "fedorgrif@gmail.com",
+      "managers": [
+        { "name": "fedorgrif@gmail.com", "email": "fedorgrif@gmail.com" }
+      ]
+    },
+    {
       "region": "ДФО",
       "managers": [
         { "name": "ДФО", "email": "dfo@affresco.ru" }

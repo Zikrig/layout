@@ -10,6 +10,10 @@ services:
       TEXTS_JSON: "app/texts.json"
       ADMIN_IDS: "${ADMIN_IDS:-}"
       FORWARD_TO_ADMINS: "${FORWARD_TO_ADMINS:-true}"
+      SMTP_HOST: "${SMTP_HOST:-smtp.yandex.ru}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
     volumes:
       - ./app/managers.json:/app/app/managers.json
       - ./app/texts.json:/app/app/texts.json

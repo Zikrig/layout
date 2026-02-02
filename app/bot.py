@@ -1,7 +1,11 @@
 import asyncio
 import json
 import logging
+import smtplib
+from email.message import EmailMessage
 from copy import deepcopy
+import io
+import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -60,6 +64,7 @@ class OrderFlow(StatesGroup):
     delivery_type = State()
     delivery_carrier = State()
     delivery_crate = State()
+    ask_comment = State()
     # Финальные данные
     ask_legal_entity = State()
     ask_city = State()
@@ -136,6 +141,24 @@ def nav_kb(show_back: bool, show_continue: bool) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
+def comment_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Пропустить", callback_data="comment:skip")],
+            [InlineKeyboardButton(text="Готово", callback_data="comment:done")],
+        ]
+    )
+
+
+def comment_prompt(order: dict[str, Any]) -> str:
+    count = len(order.get("comment", {}).get("photos", []))
+    return (
+        "Комментарий (можно текст и фото до 5 МБ, общий лимит 15 МБ).\n"
+        "Добавляйте фото по одной.\n"
+        f"Добавлено {count} фото."
+    )
+
+
 async def render_step(
     message: Message,
     state: FSMContext,
@@ -174,6 +197,37 @@ async def render_step(
             "order_snapshot": deepcopy(order),
         }
     )
+
+
+async def send_email_via_smtp(
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    to_email: str,
+    subject: str,
+    body: str,
+    attachments: list[tuple[str, bytes, str, str]] | None = None,
+) -> None:
+    if not host or not user or not password:
+        raise RuntimeError("SMTP settings are not configured")
+    msg = EmailMessage()
+    msg["From"] = user
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+    if attachments:
+        for filename, content, maintype, subtype in attachments:
+            msg.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
+
+    def _send() -> None:
+        server = smtplib.SMTP(host, port, timeout=10)
+        server.starttls()
+        server.login(user, password)
+        server.send_message(msg)
+        server.quit()
+
+    await asyncio.to_thread(_send)
 
 
 async def acknowledge_and_cleanup(message: Message) -> None:
@@ -442,6 +496,15 @@ def format_user_summary(order: dict[str, Any]) -> str:
             ]
         )
 
+    comment = order.get("comment", {})
+    if comment.get("text") or comment.get("photos"):
+        lines.append("КОММЕНТАРИИ")
+        if comment.get("text"):
+            lines.append(f"Текст: {safe_value(comment.get('text'))}")
+        if comment.get("photos"):
+            lines.append(f"Фото: {len(comment.get('photos'))} шт.")
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -563,8 +626,15 @@ def format_summary(order: dict[str, Any]) -> str:
                 "",
             ]
         )
-    else:
-        lines.extend(["КАРТИНЫ: Нет", ""])
+
+    comment = order.get("comment", {})
+    if comment.get("text") or comment.get("photos"):
+        lines.append("КОММЕНТАРИИ")
+        if comment.get("text"):
+            lines.append(f"Текст: {safe_value(comment.get('text'))}")
+        if comment.get("photos"):
+            lines.append(f"Фото: {len(comment.get('photos'))} шт.")
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -606,7 +676,7 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
             "phone": None,
             "email": None,
             "region": None,
-            "manager_chat_id": None,
+            "manager_email": None,
             "manager_name": None,
         },
         "freski": {
@@ -649,6 +719,11 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
             "type": None,
             "carrier": None,
             "crate": None,
+        },
+        "comment": {
+            "text": None,
+            "photos": [],
+            "total_size": 0,
         },
     }
 
@@ -1259,9 +1334,9 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.ask_delivery_needed,
-            "Доставка нужна?",
-            yes_no_kb(),
+            OrderFlow.ask_comment,
+            comment_prompt(order),
+            comment_kb(),
         )
 
     @router.callback_query(OrderFlow.ask_freski, F.data.in_(["yes", "no"]))
@@ -1480,38 +1555,20 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.ask_delivery_needed,
-            "Примечание: пропущено\n\nДоставка нужна?",
-            yes_no_kb(),
+            OrderFlow.ask_comment,
+            comment_prompt(order),
+            comment_kb(),
         )
 
     @router.message(OrderFlow.freski_note, F.photo)
     async def freski_note_photo(message: Message, state: FSMContext) -> None:
-        photo = message.photo[-1]
-        if photo.file_size and photo.file_size > 20 * 1024 * 1024:
-            await render_step(
-                message,
-                state,
-                "Файл больше 20 МБ. Пожалуйста, отправьте фото меньшего размера.\n\nПримечание:",
-                InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
-                ),
-            )
-            return
-        data = await state.get_data()
-        order = data["order"]
-        note_text = message.caption.strip() if message.caption else None
-        if note_text and note_text.lower() in {"пропустить", "пропуск", "skip"}:
-            note_text = None
-        order["freski"]["note"] = note_text
-        order["freski"]["note_photo"] = photo.file_id
-        await state.update_data(order=order)
-        await go_to_state(
+        await render_step(
             message,
             state,
-            OrderFlow.ask_delivery_needed,
-            "Фото прикреплено.\n\nДоставка нужна?",
-            yes_no_kb(),
+            "Фото к комментарию отправляйте на следующем шаге.\n\nПримечание:",
+            InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
+            ),
         )
         await acknowledge_and_cleanup(message)
 
@@ -1533,9 +1590,9 @@ async def run_bot() -> None:
         await go_to_state(
             message,
             state,
-            OrderFlow.ask_delivery_needed,
-            f"Примечание: {display_text}\n\nДоставка нужна?",
-            yes_no_kb(),
+            OrderFlow.ask_comment,
+            comment_prompt(order),
+            comment_kb(),
         )
         await acknowledge_and_cleanup(message)
 
@@ -1661,9 +1718,9 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.ask_delivery_needed,
-            "Доставка нужна?",
-            yes_no_kb(),
+            OrderFlow.ask_comment,
+            comment_prompt(order),
+            comment_kb(),
         )
 
     # Картины
@@ -1687,9 +1744,9 @@ async def run_bot() -> None:
             await go_to_state(
                 callback.message,
                 state,
-                OrderFlow.ask_delivery_needed,
-                "Хотите картины? Нет\n\nДоставка нужна?",
-                yes_no_kb(),
+                OrderFlow.ask_comment,
+                comment_prompt(order),
+                comment_kb(),
             )
 
     @router.message(OrderFlow.paintings_article, F.text)
@@ -1757,9 +1814,97 @@ async def run_bot() -> None:
         await go_to_state(
             message,
             state,
+            OrderFlow.ask_comment,
+            comment_prompt(order),
+            comment_kb(),
+        )
+        await acknowledge_and_cleanup(message)
+
+    @router.callback_query(OrderFlow.ask_comment, F.data == "comment:skip")
+    async def ask_comment_skip(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        data = await state.get_data()
+        order = data["order"]
+        order["comment"] = {"text": None, "photos": [], "total_size": 0}
+        await state.update_data(order=order)
+        await go_to_state(
+            callback.message,
+            state,
             OrderFlow.ask_delivery_needed,
             "Доставка нужна?",
             yes_no_kb(),
+        )
+
+    @router.callback_query(OrderFlow.ask_comment, F.data == "comment:done")
+    async def ask_comment_done(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        await go_to_state(
+            callback.message,
+            state,
+            OrderFlow.ask_delivery_needed,
+            "Доставка нужна?",
+            yes_no_kb(),
+        )
+
+    @router.message(OrderFlow.ask_comment, F.photo)
+    async def ask_comment_photo(message: Message, state: FSMContext) -> None:
+        photo = message.photo[-1]
+        if photo.file_size and photo.file_size > 5 * 1024 * 1024:
+            await render_step(
+                message,
+                state,
+                f"Файл больше 5 МБ. Отправьте фото меньшего размера.\n\n{comment_prompt((await state.get_data())['order'])}",
+                comment_kb(),
+            )
+            await acknowledge_and_cleanup(message)
+            return
+        data = await state.get_data()
+        order = data["order"]
+        comment = order.get("comment", {"text": None, "photos": [], "total_size": 0})
+        new_total = comment.get("total_size", 0) + (photo.file_size or 0)
+        if new_total > 15 * 1024 * 1024:
+            await render_step(
+                message,
+                state,
+                f"Превышен общий лимит 15 МБ. Нажмите «Готово» или удалите лишние фото.\n\n{comment_prompt(order)}",
+                comment_kb(),
+            )
+            await acknowledge_and_cleanup(message)
+            return
+        caption = message.caption.strip() if message.caption else None
+        if caption:
+            existing_text = comment.get("text")
+            comment["text"] = f"{existing_text}\n{caption}" if existing_text else caption
+        comment["photos"].append(
+            {"file_id": photo.file_id, "size": photo.file_size or 0}
+        )
+        comment["total_size"] = new_total
+        order["comment"] = comment
+        await state.update_data(order=order)
+        await render_step(
+            message,
+            state,
+            f"Фото добавлено.\n{comment_prompt(order)}",
+            comment_kb(),
+        )
+        await acknowledge_and_cleanup(message)
+
+    @router.message(OrderFlow.ask_comment, F.text)
+    async def ask_comment_text(message: Message, state: FSMContext) -> None:
+        text = message.text.strip()
+        if text.lower() in {"пропустить", "пропуск", "skip"}:
+            text = None
+        data = await state.get_data()
+        order = data["order"]
+        comment = order.get("comment", {"text": None, "photos": [], "total_size": 0})
+        comment["text"] = text
+        order["comment"] = comment
+        await state.update_data(order=order)
+        await render_step(
+            message,
+            state,
+            comment_prompt(order),
+            comment_kb(),
         )
         await acknowledge_and_cleanup(message)
 
@@ -1962,7 +2107,7 @@ async def run_bot() -> None:
         region_managers = current_managers.get(region, [])
         if len(region_managers) == 1:
             manager = region_managers[0]
-            order["client"]["manager_chat_id"] = manager.chat_id
+            order["client"]["manager_email"] = manager.email
             order["client"]["manager_name"] = manager.name or manager.email
             await state.update_data(order=order)
             await render_step(
@@ -2016,8 +2161,8 @@ async def run_bot() -> None:
             )
             return
         manager = region_managers[idx]
-        order["client"]["manager_chat_id"] = manager.chat_id
-        order["client"]["manager_name"] = manager.name or manager.email or f"ID {manager.chat_id}"
+        order["client"]["manager_email"] = manager.email
+        order["client"]["manager_name"] = manager.name or manager.email or "Менеджер"
         await state.update_data(order=order)
         await render_step(
             callback.message,
@@ -2032,69 +2177,62 @@ async def run_bot() -> None:
         order: dict[str, Any],
     ) -> None:
         summary = format_summary(order)
+        comment_photos = order.get("comment", {}).get("photos", [])
         region = order["client"].get("region", "")
         current_managers = reload_managers()
         manager_list = current_managers.get(region, [])
         
         manager_errors = []
         successful_sends = 0
-        
-        selected_manager_id = order["client"].get("manager_chat_id")
-        target_managers = manager_list
-        if selected_manager_id:
-            target_managers = [m for m in manager_list if m.chat_id == selected_manager_id]
 
-        note_photo = order.get("freski", {}).get("note_photo")
+        selected_manager_email = order["client"].get("manager_email")
+        target_managers = manager_list
+        if selected_manager_email:
+            target_managers = [m for m in manager_list if m.email == selected_manager_email]
+
+        attachments: list[tuple[str, bytes, str, str]] = []
+        if comment_photos:
+            for idx, photo in enumerate(comment_photos, start=1):
+                try:
+                    file = await message.bot.get_file(photo["file_id"])
+                    buffer = io.BytesIO()
+                    await message.bot.download_file(file.file_path, buffer)
+                    file_bytes = buffer.getvalue()
+                    mime_type, _ = mimetypes.guess_type(file.file_path or "")
+                    if mime_type:
+                        maintype, subtype = mime_type.split("/", 1)
+                    else:
+                        maintype, subtype = "image", "jpeg"
+                    filename = f"comment_{idx}.{subtype}"
+                    attachments.append((filename, file_bytes, maintype, subtype))
+                except Exception as e:
+                    logging.error(f"Failed to download photo for email: {e}")
+
         if target_managers:
             for manager in target_managers:
-                if not manager.chat_id:
-                    manager_label = manager.name or manager.email or "Без имени"
-                    manager_errors.append(f"{manager_label}: нет Telegram chat_id")
+                if not manager.email:
+                    manager_label = manager.name or "Без имени"
+                    manager_errors.append(f"{manager_label}: нет email")
                     continue
                 try:
-                    await message.bot.send_message(manager.chat_id, summary)
-                    if note_photo:
-                        await message.bot.send_photo(
-                            manager.chat_id,
-                            note_photo,
-                            caption="Фото из комментариев",
-                        )
+                    await send_email_via_smtp(
+                        config.smtp_host,
+                        config.smtp_port,
+                        config.smtp_user,
+                        config.smtp_password,
+                        manager.email,
+                        "Новая заявка",
+                        summary,
+                        attachments=attachments if attachments else None,
+                    )
                     successful_sends += 1
                 except Exception as e:
-                    error_msg = str(e)
-                    manager_name = manager.name or manager.email or f"ID {manager.chat_id}"
-                    manager_errors.append(f"{manager_name} (ID: {manager.chat_id}): {error_msg}")
-                    logging.error(f"Failed to send message to manager {manager.chat_id}: {e}")
-        
-        # Пересылка админам - ВСЕГДА, если включено
-        admin_summary = summary
+                    manager_name = manager.name or manager.email
+                    manager_errors.append(f"{manager_name} ({manager.email}): {e}")
+                    logging.error(f"Failed to send email to manager {manager.email}: {e}")
+
         if manager_errors:
-            admin_summary += "\n\n⚠️ ОШИБКИ ПРИ ОТПРАВКЕ МЕНЕДЖЕРАМ:\n"
-            for error in manager_errors:
-                admin_summary += f"• {error}\n"
-        elif not manager_list:
-            admin_summary += "\n\n⚠️ Менеджеры по региону не найдены."
-        
-        # Отправка админам - всегда, если включено
-        logging.info(f"forward_to_admins: {config.forward_to_admins}, admin_ids: {config.admin_ids}")
-        if config.forward_to_admins:
-            if config.admin_ids:
-                for admin_id in config.admin_ids:
-                    try:
-                        await message.bot.send_message(admin_id, admin_summary)
-                        if note_photo:
-                            await message.bot.send_photo(
-                                admin_id,
-                                note_photo,
-                                caption="Фото из комментариев",
-                            )
-                        logging.info(f"✓ Successfully sent order summary to admin {admin_id}")
-                    except Exception as e:
-                        logging.error(f"✗ Failed to send message to admin {admin_id}: {e}")
-            else:
-                logging.warning("⚠ FORWARD_TO_ADMINS is enabled but ADMIN_IDS is empty")
-        else:
-            logging.info("ℹ FORWARD_TO_ADMINS is disabled, skipping admin notification")
+            logging.error("Manager email send errors: " + "; ".join(manager_errors))
         
         # Сообщение пользователю - показываем итоговую информацию без tg id и разделов "Нет"
         user_summary = format_user_summary(order)
@@ -2105,8 +2243,6 @@ async def run_bot() -> None:
         
         await state.clear()
         await message.answer(user_message)
-        if note_photo:
-            await message.answer_photo(note_photo, caption="Фото из комментария")
 
     dp = Dispatcher()
     dp.include_router(router)
