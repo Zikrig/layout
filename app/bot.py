@@ -153,7 +153,7 @@ def nav_kb(show_back: bool, show_continue: bool) -> InlineKeyboardMarkup | None:
 def comment_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить", callback_data="comment:skip")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="comment:skip")],
             [InlineKeyboardButton(text="Готово", callback_data="comment:done")],
         ]
     )
