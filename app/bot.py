@@ -62,6 +62,7 @@ class OrderFlow(StatesGroup):
     # Доставка
     ask_delivery_needed = State()
     delivery_type = State()
+    delivery_address = State()
     delivery_carrier = State()
     delivery_crate = State()
     ask_comment = State()
@@ -159,11 +160,14 @@ def comment_kb() -> InlineKeyboardMarkup:
 
 
 def comment_prompt(order: dict[str, Any]) -> str:
-    count = len(order.get("comment", {}).get("photos", []))
+    comment = order.get("comment", {})
+    photos_count = len(comment.get("photos", []))
+    documents_count = len(comment.get("documents", []))
+    total_count = photos_count + documents_count
     return (
-        "Комментарий (можно текст и фото до 5 МБ, общий лимит 15 МБ).\n"
-        "Добавляйте фото по одной.\n"
-        f"Добавлено {count} фото."
+        "Комментарий (можно текст, фото и документы до 5 МБ каждый, общий лимит 15 МБ).\n"
+        "Добавляйте файлы по одному.\n"
+        f"Добавлено {total_count} файлов ({photos_count} фото, {documents_count} документов)."
     )
 
 
@@ -491,24 +495,31 @@ def format_user_summary(order: dict[str, Any]) -> str:
 
     delivery = order.get("delivery", {})
     if delivery.get("needed") is not None:
-        lines.extend(
-            [
-                "ДОСТАВКА",
-                f"Нужна: {safe_value(delivery.get('needed'))}",
-                f"Тип: {safe_value(delivery.get('type'))}",
-                f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
-                f"Обрешетка: {safe_value(delivery.get('crate'))}",
-                "",
-            ]
-        )
+        delivery_lines = [
+            "ДОСТАВКА",
+            f"Нужна: {safe_value(delivery.get('needed'))}",
+            f"Тип: {safe_value(delivery.get('type'))}",
+        ]
+        if delivery.get("address"):
+            delivery_lines.append(f"Адрес: {safe_value(delivery.get('address'))}")
+        delivery_lines.extend([
+            f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
+            f"Обрешетка: {safe_value(delivery.get('crate'))}",
+            "",
+        ])
+        lines.extend(delivery_lines)
 
     comment = order.get("comment", {})
-    if comment.get("text") or comment.get("photos"):
+    if comment.get("text") or comment.get("photos") or comment.get("documents"):
         lines.append("КОММЕНТАРИИ")
         if comment.get("text"):
             lines.append(f"Текст: {safe_value(comment.get('text'))}")
-        if comment.get("photos"):
-            lines.append(f"Фото: {len(comment.get('photos'))} шт.")
+        photos_count = len(comment.get("photos", []))
+        documents_count = len(comment.get("documents", []))
+        if photos_count > 0:
+            lines.append(f"Фото: {photos_count} шт.")
+        if documents_count > 0:
+            lines.append(f"Документы: {documents_count} шт.")
         lines.append("")
 
     return "\n".join(lines)
@@ -621,24 +632,31 @@ def format_summary(order: dict[str, Any]) -> str:
 
     delivery = order.get("delivery", {})
     if delivery.get("needed") is not None:
-        lines.extend(
-            [
-                "ДОСТАВКА",
-                f"Нужна: {safe_value(delivery.get('needed'))}",
-                f"Тип: {safe_value(delivery.get('type'))}",
-                f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
-                f"Обрешетка: {safe_value(delivery.get('crate'))}",
-                "",
-            ]
-        )
+        delivery_lines = [
+            "ДОСТАВКА",
+            f"Нужна: {safe_value(delivery.get('needed'))}",
+            f"Тип: {safe_value(delivery.get('type'))}",
+        ]
+        if delivery.get("address"):
+            delivery_lines.append(f"Адрес: {safe_value(delivery.get('address'))}")
+        delivery_lines.extend([
+            f"ТК/Самовывоз: {safe_value(delivery.get('carrier'))}",
+            f"Обрешетка: {safe_value(delivery.get('crate'))}",
+            "",
+        ])
+        lines.extend(delivery_lines)
 
     comment = order.get("comment", {})
-    if comment.get("text") or comment.get("photos"):
+    if comment.get("text") or comment.get("photos") or comment.get("documents"):
         lines.append("КОММЕНТАРИИ")
         if comment.get("text"):
             lines.append(f"Текст: {safe_value(comment.get('text'))}")
-        if comment.get("photos"):
-            lines.append(f"Фото: {len(comment.get('photos'))} шт.")
+        photos_count = len(comment.get("photos", []))
+        documents_count = len(comment.get("documents", []))
+        if photos_count > 0:
+            lines.append(f"Фото: {photos_count} шт.")
+        if documents_count > 0:
+            lines.append(f"Документы: {documents_count} шт.")
         lines.append("")
 
     return "\n".join(lines)
@@ -721,12 +739,14 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
         "delivery": {
             "needed": None,
             "type": None,
+            "address": None,
             "carrier": None,
             "crate": None,
         },
         "comment": {
             "text": None,
             "photos": [],
+            "documents": [],
             "total_size": 0,
         },
     }
@@ -1801,7 +1821,7 @@ async def run_bot() -> None:
         await callback.answer()
         data = await state.get_data()
         order = data["order"]
-        order["comment"] = {"text": None, "photos": [], "total_size": 0}
+        order["comment"] = {"text": None, "photos": [], "documents": [], "total_size": 0}
         await state.update_data(order=order)
         await go_to_state(
             callback.message,
@@ -1829,20 +1849,20 @@ async def run_bot() -> None:
             await render_step(
                 message,
                 state,
-                f"Файл больше 5 МБ. Отправьте фото меньшего размера.\n\n{comment_prompt((await state.get_data())['order'])}",
+                f"Файл больше 5 МБ. Отправьте файл меньшего размера.\n\n{comment_prompt((await state.get_data())['order'])}",
                 comment_kb(),
             )
             await acknowledge_and_cleanup(message)
             return
         data = await state.get_data()
         order = data["order"]
-        comment = order.get("comment", {"text": None, "photos": [], "total_size": 0})
+        comment = order.get("comment", {"text": None, "photos": [], "documents": [], "total_size": 0})
         new_total = comment.get("total_size", 0) + (photo.file_size or 0)
         if new_total > 15 * 1024 * 1024:
             await render_step(
                 message,
                 state,
-                f"Превышен общий лимит 15 МБ. Нажмите «Готово» или удалите лишние фото.\n\n{comment_prompt(order)}",
+                f"Превышен общий лимит 15 МБ. Нажмите «Готово» или удалите лишние файлы.\n\n{comment_prompt(order)}",
                 comment_kb(),
             )
             await acknowledge_and_cleanup(message)
@@ -1865,6 +1885,49 @@ async def run_bot() -> None:
         )
         await acknowledge_and_cleanup(message)
 
+    @router.message(OrderFlow.ask_comment, F.document)
+    async def ask_comment_document(message: Message, state: FSMContext) -> None:
+        document = message.document
+        if document.file_size and document.file_size > 5 * 1024 * 1024:
+            await render_step(
+                message,
+                state,
+                f"Файл больше 5 МБ. Отправьте документ меньшего размера.\n\n{comment_prompt((await state.get_data())['order'])}",
+                comment_kb(),
+            )
+            await acknowledge_and_cleanup(message)
+            return
+        data = await state.get_data()
+        order = data["order"]
+        comment = order.get("comment", {"text": None, "photos": [], "documents": [], "total_size": 0})
+        new_total = comment.get("total_size", 0) + (document.file_size or 0)
+        if new_total > 15 * 1024 * 1024:
+            await render_step(
+                message,
+                state,
+                f"Превышен общий лимит 15 МБ. Нажмите «Готово» или удалите лишние файлы.\n\n{comment_prompt(order)}",
+                comment_kb(),
+            )
+            await acknowledge_and_cleanup(message)
+            return
+        caption = message.caption.strip() if message.caption else None
+        if caption:
+            existing_text = comment.get("text")
+            comment["text"] = f"{existing_text}\n{caption}" if existing_text else caption
+        comment["documents"].append(
+            {"file_id": document.file_id, "size": document.file_size or 0, "file_name": document.file_name}
+        )
+        comment["total_size"] = new_total
+        order["comment"] = comment
+        await state.update_data(order=order)
+        await render_step(
+            message,
+            state,
+            f"Документ добавлен.\n{comment_prompt(order)}",
+            comment_kb(),
+        )
+        await acknowledge_and_cleanup(message)
+
     @router.message(OrderFlow.ask_comment, F.text)
     async def ask_comment_text(message: Message, state: FSMContext) -> None:
         text = message.text.strip()
@@ -1872,7 +1935,7 @@ async def run_bot() -> None:
             text = None
         data = await state.get_data()
         order = data["order"]
-        comment = order.get("comment", {"text": None, "photos": [], "total_size": 0})
+        comment = order.get("comment", {"text": None, "photos": [], "documents": [], "total_size": 0})
         comment["text"] = text
         order["comment"] = comment
         await state.update_data(order=order)
@@ -1958,13 +2021,21 @@ async def run_bot() -> None:
         order = data["order"]
         order["delivery"]["type"] = delivery_type_value
         await state.update_data(order=order)
-        await go_to_state(
-            callback.message,
-            state,
-            OrderFlow.delivery_carrier,
-            "ТК или самовывоз:",
-            list_kb(config.delivery_carriers, "delivery_carrier"),
-        )
+        if delivery_type_value == "До адреса":
+            await go_to_state(
+                callback.message,
+                state,
+                OrderFlow.delivery_address,
+                "Адрес доставки:",
+            )
+        else:
+            await go_to_state(
+                callback.message,
+                state,
+                OrderFlow.delivery_carrier,
+                "ТК или самовывоз:",
+                list_kb(config.delivery_carriers, "delivery_carrier"),
+            )
 
     @router.callback_query(OrderFlow.delivery_carrier, F.data.startswith("delivery_carrier:"))
     async def delivery_carrier(callback: CallbackQuery, state: FSMContext) -> None:
@@ -2007,6 +2078,21 @@ async def run_bot() -> None:
             OrderFlow.ask_legal_entity,
             "Юрлицо (ИП/ООО):"
         )
+
+    @router.message(OrderFlow.delivery_address, F.text)
+    async def delivery_address(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        order = data["order"]
+        order["delivery"]["address"] = message.text.strip()
+        await state.update_data(order=order)
+        await go_to_state(
+            message,
+            state,
+            OrderFlow.delivery_carrier,
+            "ТК или самовывоз:",
+            list_kb(config.delivery_carriers, "delivery_carrier"),
+        )
+        await acknowledge_and_cleanup(message)
 
     # Финальные вопросы
     @router.message(OrderFlow.ask_legal_entity, F.text)
@@ -2167,6 +2253,10 @@ async def run_bot() -> None:
             target_managers = [m for m in manager_list if m.email == selected_manager_email]
 
         attachments: list[tuple[str, bytes, str, str]] = []
+        comment_data = order.get("comment", {})
+        comment_photos = comment_data.get("photos", [])
+        comment_documents = comment_data.get("documents", [])
+        
         if comment_photos:
             for idx, photo in enumerate(comment_photos, start=1):
                 try:
@@ -2179,10 +2269,27 @@ async def run_bot() -> None:
                         maintype, subtype = mime_type.split("/", 1)
                     else:
                         maintype, subtype = "image", "jpeg"
-                    filename = f"comment_{idx}.{subtype}"
+                    filename = f"comment_photo_{idx}.{subtype}"
                     attachments.append((filename, file_bytes, maintype, subtype))
                 except Exception as e:
                     logging.error(f"Failed to download photo for email: {e}")
+        
+        if comment_documents:
+            for idx, doc in enumerate(comment_documents, start=1):
+                try:
+                    file = await message.bot.get_file(doc["file_id"])
+                    buffer = io.BytesIO()
+                    await message.bot.download_file(file.file_path, buffer)
+                    file_bytes = buffer.getvalue()
+                    mime_type, _ = mimetypes.guess_type(file.file_path or "")
+                    if mime_type:
+                        maintype, subtype = mime_type.split("/", 1)
+                    else:
+                        maintype, subtype = "application", "octet-stream"
+                    file_name = doc.get("file_name", f"document_{idx}")
+                    attachments.append((file_name, file_bytes, maintype, subtype))
+                except Exception as e:
+                    logging.error(f"Failed to download document for email: {e}")
 
         if target_managers:
             for manager in target_managers:
