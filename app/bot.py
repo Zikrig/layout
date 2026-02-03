@@ -28,13 +28,13 @@ class OrderFlow(StatesGroup):
     ask_freski = State()
     freski_catalog = State()
     freski_library_catalog = State()
+    freski_article = State()
     freski_width = State()
     freski_height = State()
     freski_material = State()
     freski_humidity = State()
     freski_crackle_aging = State()
     freski_color_sample = State()
-    freski_note = State()
     # Дизайнерские обои
     ask_designer_wallpapers = State()
     designer_catalog = State()
@@ -115,6 +115,14 @@ def main_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Дизайнерские обои", callback_data="menu:designer")],
             [InlineKeyboardButton(text="Фоновые обои", callback_data="menu:background")],
             [InlineKeyboardButton(text="Картины", callback_data="menu:paintings")],
+        ]
+    )
+
+
+def new_order_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Сделать еще заказ", callback_data="new_order")],
         ]
     )
 
@@ -399,6 +407,8 @@ def format_user_summary(order: dict[str, Any]) -> str:
         lines.append("ФРЕСКИ")
         if freski.get("catalog_name"):
             lines.append(f"Каталог: {safe_value(freski.get('catalog_name'))}")
+        if freski.get("article"):
+            lines.append(f"Артикул: {safe_value(freski.get('article'))}")
         if size.get("width"):
             lines.append(f"Ширина, см: {safe_value(size.get('width'))}")
         if size.get("height"):
@@ -411,10 +421,6 @@ def format_user_summary(order: dict[str, Any]) -> str:
             lines.append(f"Гидроизоляция: {safe_value(freski.get('hydro_insulation'))}")
         if freski.get("crackle_aging") is not None:
             lines.append(f"Старение: {safe_value(freski.get('crackle_aging'))}")
-        if freski.get("note") is not None:
-            lines.append(f"Примечание: {safe_value(freski.get('note'))}")
-        if freski.get("note_photo"):
-            lines.append("Фото: прикреплено")
         lines.append("")
 
     # Дизайнерские обои - только если enabled
@@ -538,14 +544,13 @@ def format_summary(order: dict[str, Any]) -> str:
             [
                 "ФРЕСКИ: Да",
                 f"Каталог: {safe_value(freski.get('catalog_name'))}",
+                f"Артикул: {safe_value(freski.get('article'))}",
                 f"Ширина, см: {safe_value(size.get('width'))}",
                 f"Высота, см: {safe_value(size.get('height'))}",
                 f"Материал: {safe_value(freski.get('material'))}",
                 f"Цветопроба: {safe_value(freski.get('color_sample'))}",
                 f"Гидроизоляция: {safe_value(freski.get('hydro_insulation'))}",
                 f"Старение: {safe_value(freski.get('crackle_aging'))}",
-                f"Примечание: {safe_value(freski.get('note'))}",
-                f"Фото: {'есть' if freski.get('note_photo') else '-'}",
                 "",
             ]
         )
@@ -682,13 +687,12 @@ def build_empty_order(telegram: str) -> dict[str, Any]:
         "freski": {
             "enabled": False,
             "catalog_name": None,
+            "article": None,
             "size_cm": {"width": None, "height": None},
             "material": None,
             "color_sample": None,
             "hydro_insulation": None,
             "crackle_aging": None,
-            "note": None,
-            "note_photo": None,
         },
         "designer_wallpapers": {
             "enabled": False,
@@ -755,6 +759,19 @@ async def run_bot() -> None:
         start_text = texts.get("start_text", "Добрый день.")
         await message.answer(start_text)
         await render_step(message, state, "Выберите раздел:", main_menu_kb(), include_nav=False)
+
+    @router.callback_query(F.data == "new_order")
+    async def new_order(callback: CallbackQuery, state: FSMContext) -> None:
+        await callback.answer()
+        await state.clear()
+        await ensure_user_profile(callback)
+        order = build_empty_order(telegram_label(callback))
+        await state.update_data(order=order)
+        await state.set_state(OrderFlow.main_menu)
+        texts = reload_texts()
+        start_text = texts.get("start_text", "Добрый день.")
+        await callback.message.answer(start_text)
+        await render_step(callback.message, state, "Выберите раздел:", main_menu_kb(), include_nav=False)
 
     @router.callback_query(OrderFlow.main_menu, F.data.in_(["menu:freski", "menu:designer", "menu:background", "menu:paintings"]))
     async def main_menu(callback: CallbackQuery, state: FSMContext) -> None:
@@ -1389,8 +1406,8 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.freski_width,
-            "Индивидуальная отрисовка\n\nШирина, см:",
+            OrderFlow.freski_article,
+            "Индивидуальная отрисовка\n\nАртикул:",
         )
 
     @router.callback_query(OrderFlow.freski_library_catalog, F.data.startswith("freski_library_catalog:"))
@@ -1405,8 +1422,8 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.freski_width,
-            f"Каталог: {catalog_name}\n\nШирина, см:",
+            OrderFlow.freski_article,
+            f"Каталог: {catalog_name}\n\nАртикул:",
         )
 
     @router.message(OrderFlow.freski_width, F.text)
@@ -1435,6 +1452,21 @@ async def run_bot() -> None:
             OrderFlow.freski_material,
             "Материал:",
             list_kb(config.freski_materials, "freski_material"),
+        )
+        await acknowledge_and_cleanup(message)
+
+    @router.message(OrderFlow.freski_article, F.text)
+    async def freski_article(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        order = data["order"]
+        article = message.text.strip()
+        order["freski"]["article"] = article
+        await state.update_data(order=order)
+        await go_to_state(
+            message,
+            state,
+            OrderFlow.freski_width,
+            "Ширина, см:",
         )
         await acknowledge_and_cleanup(message)
 
@@ -1474,11 +1506,9 @@ async def run_bot() -> None:
             await go_to_state(
                 callback.message,
                 state,
-                OrderFlow.freski_note,
-                f"Материал: {material}\n\nЦветопроба: Да\n\nПримечание:",
-                InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
-                ),
+                OrderFlow.ask_comment,
+                comment_prompt(order),
+                comment_kb(),
             )
             return
 
@@ -1537,64 +1567,10 @@ async def run_bot() -> None:
         await go_to_state(
             callback.message,
             state,
-            OrderFlow.freski_note,
-            f"Цветопроба: {color_sample}\n\nПримечание:",
-            InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
-            ),
-        )
-
-    @router.callback_query(OrderFlow.freski_note, F.data == "skip_note")
-    async def freski_note_skip(callback: CallbackQuery, state: FSMContext) -> None:
-        await callback.answer()
-        data = await state.get_data()
-        order = data["order"]
-        order["freski"]["note"] = None
-        order["freski"]["note_photo"] = None
-        await state.update_data(order=order)
-        await go_to_state(
-            callback.message,
-            state,
             OrderFlow.ask_comment,
             comment_prompt(order),
             comment_kb(),
         )
-
-    @router.message(OrderFlow.freski_note, F.photo)
-    async def freski_note_photo(message: Message, state: FSMContext) -> None:
-        await render_step(
-            message,
-            state,
-            "Фото к комментарию отправляйте на следующем шаге.\n\nПримечание:",
-            InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_note")]]
-            ),
-        )
-        await acknowledge_and_cleanup(message)
-
-    @router.message(OrderFlow.freski_note, F.text)
-    async def freski_note(message: Message, state: FSMContext) -> None:
-        note_text = message.text.strip()
-        if note_text.lower() in {"пропустить", "пропуск", "skip"}:
-            note_text = None
-            display_text = "пропущено"
-        else:
-            display_text = note_text
-        
-        data = await state.get_data()
-        order = data["order"]
-        order["freski"]["note"] = note_text
-        if note_text is None:
-            order["freski"]["note_photo"] = None
-        await state.update_data(order=order)
-        await go_to_state(
-            message,
-            state,
-            OrderFlow.ask_comment,
-            comment_prompt(order),
-            comment_kb(),
-        )
-        await acknowledge_and_cleanup(message)
 
     # Фоновые обои
     @router.callback_query(OrderFlow.ask_background_wallpapers, F.data.in_(["yes", "no"]))
@@ -2242,7 +2218,7 @@ async def run_bot() -> None:
         user_message += "\n\nМы свяжемся с вами в ближайшее время."
         
         await state.clear()
-        await message.answer(user_message)
+        await message.answer(user_message, reply_markup=new_order_kb())
 
     dp = Dispatcher()
     dp.include_router(router)
